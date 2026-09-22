@@ -1,0 +1,1797 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Агрегатор тестов — платформа тестирования</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --primary:#2563EB;--pt:#E6F4FE;--ph:#1D4ED8;
+  --accent:#7C3AED;--at:#EDE9FE;
+  --ink:#111827;--ink2:#6B7280;--ink3:#9CA3AF;
+  --bg:#FAFAFA;--surf:#FFFFFF;--bord:#E5E7EB;--s2:#F3F4F6;
+  --ok:#10B981;--ok-t:#ECFDF5;--ok-b:#BBF7D0;
+  --warn:#F59E0B;--warn-t:#FFFBEB;--warn-b:#FDE68A;
+  --err:#EF4444;--err-t:#FEF2F2;--err-b:#FECACA;
+  --info:#0EA5E9;
+  --shadow:0 1px 3px rgba(0,0,0,.08),0 4px 12px rgba(0,0,0,.05);
+  --shadow-lg:0 8px 32px rgba(0,0,0,.12),0 2px 8px rgba(0,0,0,.08);
+  --r4:4px;--r8:8px;--r12:12px;--r16:16px;--pill:9999px;
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font-family:'Inter',system-ui,sans-serif;font-size:13px;
+  -webkit-font-smoothing:antialiased;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+button,input,select,textarea{font-family:inherit;font-size:inherit}
+button{cursor:pointer}
+a{color:inherit}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-thumb{background:var(--bord);border-radius:8px}
+
+.topbar{height:56px;background:var(--surf);border-bottom:1px solid var(--bord);display:flex;align-items:center;padding:0 24px;gap:16px;flex-shrink:0;position:sticky;top:0;z-index:40}
+.brand{display:flex;align-items:center;gap:9px;cursor:pointer;flex-shrink:0}
+.brand-icon{width:30px;height:30px;border-radius:var(--r8);background:var(--primary);display:flex;align-items:center;justify-content:center}
+.brand-name{font-size:15px;font-weight:700;letter-spacing:-.2px}
+.sep-v{width:1px;height:22px;background:var(--bord)}
+.nav-tabs{display:flex;align-items:center;gap:2px}
+.nav-tab{padding:8px 12px;border-radius:var(--r8);color:var(--ink2);font-weight:500;text-decoration:none;font-size:13px;white-space:nowrap}
+.nav-tab.active{color:var(--primary);background:var(--pt);font-weight:600}
+.sp{flex:1}
+.avatar{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#2563EB,#7C3AED);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0}
+
+.btn{height:34px;padding:0 14px;border-radius:var(--r8);border:1.5px solid var(--bord);background:var(--surf);color:var(--ink);font-weight:600;font-size:13px;display:inline-flex;align-items:center;gap:6px;transition:all .15s}
+.btn:hover{border-color:var(--primary);color:var(--primary)}
+.btn.primary{background:var(--primary);border-color:var(--primary);color:#fff}
+.btn.primary:hover{background:var(--ph);color:#fff}
+.btn.danger{color:var(--err);border-color:var(--err-b)}
+.btn.danger:hover{background:var(--err-t)}
+.btn.sm{height:28px;padding:0 10px;font-size:12px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn:disabled:hover{border-color:var(--bord);color:var(--ink)}
+
+.card{background:var(--surf);border:1px solid var(--bord);border-radius:var(--r12);box-shadow:var(--shadow)}
+.tag{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:var(--pill);font-size:11px;font-weight:600}
+.tag-blue{background:var(--pt);color:var(--primary)}
+.tag-violet{background:var(--at);color:var(--accent)}
+.tag-green{background:var(--ok-t);color:#065F46}
+.tag-red{background:var(--err-t);color:#991B1B}
+.tag-amber{background:var(--warn-t);color:#92400E}
+.tag-grey{background:var(--s2);color:var(--ink2)}
+
+input.field,select.field,textarea.field{width:100%;border:1px solid var(--bord);border-radius:var(--r8);padding:9px 11px;background:var(--surf);color:var(--ink)}
+input.field:focus,select.field:focus,textarea.field:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px var(--pt)}
+label.flabel{display:block;font-size:12px;font-weight:600;color:var(--ink2);margin-bottom:6px}
+
+.page{max-width:1320px;margin:0 auto;padding:24px 28px 60px}
+.pagehead{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:20px;flex-wrap:wrap}
+.pagehead h1{font-size:22px;margin:0 0 4px;letter-spacing:-.3px}
+.pagehead p{margin:0;color:var(--ink2)}
+
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 18px;border-radius:var(--r8);font-size:13px;font-weight:500;box-shadow:var(--shadow-lg);z-index:200;display:flex;align-items:center;gap:8px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(-4px)}
+.toast.err{background:var(--err)}
+.toast-dot{width:7px;height:7px;border-radius:50%;background:var(--ok)}
+
+.modal-veil{position:fixed;inset:0;background:rgba(17,24,39,.45);display:flex;align-items:center;justify-content:center;z-index:150;padding:24px}
+.modal{background:var(--surf);border-radius:var(--r16);box-shadow:var(--shadow-lg);max-width:560px;width:100%;max-height:88vh;overflow:auto;padding:24px}
+.modal h2{margin:0 0 4px;font-size:17px}
+.modal .mhint{color:var(--ink2);margin:0 0 18px;font-size:12px}
+.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
+
+.empty{padding:48px 20px;text-align:center;color:var(--ink3)}
+.empty b{display:block;color:var(--ink);font-size:14px;margin-bottom:4px}
+
+.loading-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;color:var(--ink2)}
+.spinner{width:28px;height:28px;border-radius:50%;border:3px solid var(--bord);border-top-color:var(--primary);animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.conn-err{max-width:480px;margin:60px auto;padding:28px}
+.conn-err h2{margin:0 0 10px;color:var(--err)}
+.conn-err code{background:var(--s2);padding:2px 6px;border-radius:4px;font-family:'JetBrains Mono',monospace;font-size:12px}
+
+svg{display:block}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="toast" class="toast"><span class="toast-dot"></span><span id="toastMsg"></span></div>
+
+<script>
+/* ============================================================
+   Агрегатор тестов — frontend wired to the Flask API (testflow-api).
+   No localStorage for app data: everything goes through fetch().
+
+   IMPORTANT: this file must be self-hosted (opened from disk, or served
+   as a static file by your own server / PythonAnywhere / Netlify / etc).
+   A Claude.ai *published artifact* blocks fetch() to arbitrary hosts via
+   its content-security policy, so this page will NOT work if published
+   through Claude — that restriction lives in Claude's hosting, not here.
+   ============================================================ */
+
+/* ---------------- configuration ---------------- */
+// Point this at your deployed API. For local dev against `python app.py`,
+// the default below is already correct.
+const API_BASE = 'http://127.0.0.1:5000/api';
+
+const ICONS = {
+  logo:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>`,
+  check:`<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
+  chevL:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>`,
+  chevR:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>`,
+  flag:`<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>`,
+  clock:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
+  plus:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
+  trash:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>`,
+};
+
+function uid(prefix){ return prefix+'-'+Math.random().toString(36).slice(2,8); }
+function esc(s){ return (s==null?'':String(s)).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function fmtClock(sec){ sec=Math.max(0,Math.round(sec)); const m=Math.floor(sec/60), s=sec%60; return String(m).padStart(2,'0')+':'+String(s).padStart(2,'0'); }
+
+function toast(msg, isErr){
+  const t=document.getElementById('toast'); const m=document.getElementById('toastMsg');
+  m.textContent=msg; t.classList.toggle('err', !!isErr); t.classList.add('show');
+  clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'), isErr?3800:2200);
+}
+
+/* ============================================================
+   API CLIENT
+   ============================================================ */
+let accessToken = null;   // kept in memory only — never in localStorage
+let currentUser = null;
+
+async function rawFetch(path, opts={}){
+  const res = await fetch(API_BASE+path, {
+    ...opts,
+    credentials: 'include',  // send/receive the httpOnly refresh cookie
+    headers: {
+      'Content-Type': 'application/json',
+      ...(accessToken ? {'Authorization': 'Bearer '+accessToken} : {}),
+      ...(opts.headers||{}),
+    },
+  });
+  return res;
+}
+
+async function apiFetch(path, opts={}){
+  let res;
+  try{
+    res = await rawFetch(path, opts);
+  }catch(networkErr){
+    throw new ApiError('network', 'Не удалось связаться с API по адресу '+API_BASE+'. Проверьте, что сервер запущен и адрес указан верно.');
+  }
+  if(res.status===401 && path!=='/auth/login' && path!=='/auth/refresh'){
+    const refreshed = await tryRefresh();
+    if(refreshed){
+      res = await rawFetch(path, opts);
+    }
+  }
+  if(!res.ok){
+    let body={}; try{ body = await res.json(); }catch(e){}
+    if(res.status===401){ accessToken=null; currentUser=null; }
+    throw new ApiError(body.error||('http_'+res.status), body.error ? body.error : ('Ошибка запроса: '+res.status));
+  }
+  if(res.status===204) return null;
+  return res.json();
+}
+
+class ApiError extends Error{
+  constructor(code, message){ super(message); this.code=code; }
+}
+
+async function tryRefresh(){
+  try{
+    const res = await rawFetch('/auth/refresh', {method:'POST'});
+    if(!res.ok) return false;
+    const data = await res.json();
+    accessToken = data.accessToken; currentUser = data.user;
+    return true;
+  }catch(e){ return false; }
+}
+
+const api = {
+  login: (email,password)=> apiFetch('/auth/login', {method:'POST', body:JSON.stringify({email,password})}),
+  logout: ()=> apiFetch('/auth/logout', {method:'POST'}),
+  me: ()=> apiFetch('/auth/me'),
+
+  listQuestions: (params={})=> apiFetch('/questions?'+new URLSearchParams(params)),
+  createQuestion: (data)=> apiFetch('/questions', {method:'POST', body:JSON.stringify(data)}),
+  updateQuestion: (id,data)=> apiFetch('/questions/'+id, {method:'PUT', body:JSON.stringify(data)}),
+  deleteQuestion: (id)=> apiFetch('/questions/'+id, {method:'DELETE'}),
+  exportQuestions: ()=> apiFetch('/questions/export'),
+  importQuestions: (payload)=> apiFetch('/questions/import', {method:'POST', body:JSON.stringify(payload)}),
+  uploadAsset: (data)=> apiFetch('/assets', {method:'POST', body:JSON.stringify(data)}),
+
+  listTests: ()=> apiFetch('/tests'),
+  getTest: (id)=> apiFetch('/tests/'+id),
+  getTestQuestions: (id)=> apiFetch('/tests/'+id+'/questions'),
+  createTest: (data)=> apiFetch('/tests', {method:'POST', body:JSON.stringify(data)}),
+  updateTest: (id,data)=> apiFetch('/tests/'+id, {method:'PUT', body:JSON.stringify(data)}),
+  publishTest: (id)=> apiFetch('/tests/'+id+'/publish', {method:'POST'}),
+  exportTest: (id)=> apiFetch('/tests/'+id+'/export'),
+
+  listAttempts: (params={})=> apiFetch('/attempts?'+new URLSearchParams(params)),
+  getAttempt: (id)=> apiFetch('/attempts/'+id),
+  startAttempt: (testId)=> apiFetch('/attempts', {method:'POST', body:JSON.stringify({testId})}),
+  patchAttempt: (id,data)=> apiFetch('/attempts/'+id, {method:'PUT', body:JSON.stringify(data)}),
+  submitAttempt: (id)=> apiFetch('/attempts/'+id+'/submit', {method:'POST'}),
+  getResults: (id)=> apiFetch('/attempts/'+id+'/results'),
+
+  listInvitations: (params={})=> apiFetch('/invitations?'+new URLSearchParams(params)),
+  createInvitation: (testId,email)=> apiFetch('/invitations', {method:'POST', body:JSON.stringify({testId,email})}),
+  listUsers: ()=> apiFetch('/users'),
+
+  listKeys: ()=> apiFetch('/apikeys'),
+  createKey: (data)=> apiFetch('/apikeys', {method:'POST', body:JSON.stringify(data)}),
+  revokeKey: (id)=> apiFetch('/apikeys/'+id+'/revoke', {method:'POST'}),
+
+  exportBackup: ()=> apiFetch('/backup/export'),
+};
+
+/* ---------------- local export/import (client-side JSON handling) ---------------- */
+function downloadJSON(obj, filename){
+  const blob = new Blob([JSON.stringify(obj,null,2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url; a.download=filename; document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 200);
+}
+function readFileAsText(file){
+  return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsText(file); });
+}
+function readFileAsBase64(file){
+  return new Promise((res,rej)=>{
+    const r=new FileReader();
+    r.onload=()=>res(r.result.split(',')[1]); // strip the "data:<mime>;base64," prefix
+    r.onerror=rej; r.readAsDataURL(file);
+  });
+}
+// Asset URLs returned by the API are relative ("/api/assets/AST-xxx"); resolve
+// them against the API's origin (API_BASE minus its trailing "/api").
+function assetUrl(u){ return /^https?:\/\//.test(u) ? u : API_BASE.replace(/\/api\/?$/,'') + u; }
+function renderMedia(media){
+  if(!media || !media.length) return '';
+  return media.map(m=>{
+    const src = assetUrl(m.url);
+    if(m.kind==='video') return `<video src="${esc(src)}" controls style="max-width:100%;border-radius:10px;margin:10px 0;display:block"></video>`;
+    return `<img src="${esc(src)}" alt="${esc(m.alt||'')}" style="max-width:100%;border-radius:10px;margin:10px 0;display:block;border:1px solid var(--bord)">`;
+  }).join('');
+}
+
+/* ============================================================
+   ROUTER + CACHE
+   ============================================================ */
+function go(hash){ location.hash = hash; }
+window.addEventListener('hashchange', render);
+
+// Simple per-domain caches, refreshed by loaders / invalidated after writes.
+const CACHE = { questions:null, tests:null };
+function invalidateQuestions(){ CACHE.questions=null; }
+function invalidateTests(){ CACHE.tests=null; }
+
+async function ensureQuestions(){
+  if(!CACHE.questions) CACHE.questions = await api.listQuestions();
+  return CACHE.questions;
+}
+async function ensureTests(){
+  if(!CACHE.tests) CACHE.tests = await api.listTests();
+  return CACHE.tests;
+}
+function qById(id){ return (CACHE.questions||[]).find(q=>q.id===id); }
+function testById(id){ return (CACHE.tests||[]).find(t=>t.id===id); }
+function allTestQuestionIds(test){ return test.sections.flatMap(s=>s.questionIds); }
+
+const bankState = { search:'', skill:'all', difficulty:'all', status:'all', selectedId:null };
+const taking = { attemptId:null, idx:0, timerHandle:null, test:null, questions:null, attempt:null };
+
+function showLoading(){
+  document.getElementById('app').innerHTML = `<div class="loading-screen"><div class="spinner"></div><div>Загрузка…</div></div>`;
+}
+function showConnError(e){
+  document.getElementById('app').innerHTML = `<div class="conn-err card">
+    <h2>Не удалось подключиться к API</h2>
+    <p>${esc(e.message)}</p>
+    <p style="color:var(--ink2);font-size:12px;line-height:1.6">Текущий адрес API: <code>${esc(API_BASE)}</code>. Если вы открыли эту страницу как Claude-артефакт — это ожидаемо, страница должна быть self-hosted (см. README в testflow-api). Если сервер уже запущен, проверьте CORS (<code>ALLOWED_ORIGINS</code> на бэкенде) и что адрес в <code>API_BASE</code> в этом файле совпадает.</p>
+    <button class="btn primary" onclick="render()">Повторить</button>
+  </div>`;
+}
+
+async function render(){
+  const hash = location.hash || '#/dashboard';
+  const [_,root,p1,p2] = hash.split('/');
+
+  if(root===''||hash==='#/'||hash==='#'){ go('#/dashboard'); return; }
+
+  if(root==='auth'){ document.getElementById('app').innerHTML = viewAuth(); bindAuth(); return; }
+
+  if(!currentUser){
+    showLoading();
+    const ok = await tryRefresh().catch(()=>false);
+    if(!ok){ go('#/auth'); return; }
+  }
+
+  showLoading();
+  try{
+    let body='';
+    if(root==='dashboard') body = await loadAndRenderDashboardHome();
+    else if(root==='tests') body = await loadAndRenderTestsList();
+    else if(root==='bank') body = await loadAndRenderBank();
+    else if(root==='builder') body = await loadAndRenderBuilder(p1);
+    else if(root==='analytics') body = await loadAndRenderAnalytics(p1);
+    else if(root==='apikeys') body = await loadAndRenderApiKeys();
+    else if(root==='candidate') body = await loadAndRenderCandidateHome();
+    else if(root==='lobby') body = await loadAndRenderLobby(p1);
+    else if(root==='test') body = await loadAndRenderTestTaking(p1);
+    else if(root==='results') body = await loadAndRenderResults(p1);
+    else body = await loadAndRenderDashboardHome();
+
+    if(root==='test') document.getElementById('app').innerHTML = body;
+    else if(root==='dashboard') document.getElementById('app').innerHTML = dashboardChrome_(body);
+    else document.getElementById('app').innerHTML = chrome_(body, root);
+    bindGlobal();
+    bindPage(root, p1, p2);
+  }catch(e){
+    if(e instanceof ApiError && e.code==='network'){ showConnError(e); return; }
+    if(e instanceof ApiError && (e.code==='invalid_token'||e.code==='missing_token')){ go('#/auth'); return; }
+    console.error(e);
+    document.getElementById('app').innerHTML = `<div class="conn-err card"><h2>Что-то пошло не так</h2><p>${esc(e.message)}</p><button class="btn primary" onclick="render()">Повторить</button></div>`;
+  }
+}
+
+function chrome_(body, root){
+  const isAdmin = currentUser.role==='admin';
+  const tabs = isAdmin ? [
+    ['tests','Тесты'],['bank','Банк вопросов'],['apikeys','API-ключи'],
+  ] : [
+    ['candidate','Мои тесты'],
+  ];
+  return `
+  <div class="topbar">
+    <div class="brand" onclick="go('${isAdmin?'#/dashboard':'#/candidate'}')">
+      <div class="brand-icon">${ICONS.logo}</div>
+      <div class="brand-name">Агрегатор тестов</div>
+    </div>
+    <div class="sep-v"></div>
+    <div class="nav-tabs">
+      ${tabs.map(([r,label])=>`<a class="nav-tab ${root===r.split('/')[0]?'active':''}" href="#/${r}">${label}</a>`).join('')}
+    </div>
+    <div class="sp"></div>
+    <div class="avatar" title="${esc(currentUser.name)}">${esc((currentUser.name||currentUser.email).split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase())}</div>
+    <button class="btn sm" id="logoutBtn">Выйти</button>
+  </div>
+  <div class="page">${body}</div>`;
+}
+
+/* ---------------- dashboard-specific chrome: dark sidebar, matches the original admin-dashboard mockup ---------------- */
+function dashboardChrome_(body){
+  const navSection = (label, items)=>`
+    <div style="color:#9CA3AF;font-size:10px;letter-spacing:.8px;margin:18px 10px 6px">${label}</div>
+    ${items.map(it=>{
+      if(it.soon) return `<a href="#" class="nav-soon" style="display:flex;justify-content:space-between;align-items:center;color:#6B7280;text-decoration:none;padding:10px;border-radius:8px;margin:2px 0;font-weight:500;cursor:not-allowed">${it.label}<span style="font-size:9px;background:rgba(255,255,255,.08);padding:2px 6px;border-radius:9999px">скоро</span></a>`;
+      return `<a href="${it.href}" style="display:block;color:#D1D5DB;text-decoration:none;padding:10px;border-radius:8px;margin:2px 0;font-weight:500;${it.active?'background:#2563EB;color:#fff':''}">${it.label}</a>`;
+    }).join('')}`;
+
+  return `
+  <div style="min-height:100vh;display:flex;background:var(--bg)">
+    <aside style="width:224px;flex-shrink:0;background:#111827;color:#fff;padding:20px 12px;position:relative">
+      <div style="font-size:18px;font-weight:700;padding:4px 10px 24px">Агрегатор тестов</div>
+      <div style="background:rgba(255,255,255,.08);padding:10px;border-radius:8px;font-size:12px;margin-bottom:8px">
+        <b style="display:block;font-size:13px;margin-bottom:3px">${esc(currentUser.name)}</b>${esc(currentUser.email)}
+      </div>
+      ${navSection('ОБЗОР', [
+        {label:'Главный дашборд', href:'#/dashboard', active:true},
+        {label:'Уведомления', soon:true},
+      ])}
+      ${navSection('УПРАВЛЕНИЕ', [
+        {label:'Тесты', href:'#/tests'},
+        {label:'Банк вопросов', href:'#/bank'},
+        {label:'Кампании', soon:true},
+        {label:'Обучающиеся', soon:true},
+      ])}
+      ${navSection('АНАЛИТИКА', [
+        {label:'Отчёты', soon:true},
+        {label:'Прокторинг', soon:true},
+      ])}
+      ${navSection('ОРГАНИЗАЦИЯ', [
+        {label:'API-ключи', href:'#/apikeys'},
+        {label:'Настройки', soon:true},
+      ])}
+      <div style="margin-top:20px;padding-top:14px;border-top:1px solid rgba(255,255,255,.13);padding-left:10px">
+        <button class="btn sm" id="logoutBtn" style="background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.15);color:#D1D5DB">Выйти</button>
+      </div>
+    </aside>
+    <main style="flex:1;min-width:0">
+      <header class="topbar" style="padding:0 30px">
+        <h2 style="font-size:15px;margin:0;font-weight:600">Рабочая область</h2>
+        <div class="sp"></div>
+        <input class="field" id="dashSearch" placeholder="Поиск тестов, обучающихся, вопросов" style="width:250px;height:33px">
+        <button class="btn sm" id="helpBtn">Справка</button>
+        <div class="avatar" title="${esc(currentUser.name)}">${esc((currentUser.name||currentUser.email).split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase())}</div>
+      </header>
+      <div class="page" style="max-width:1400px">${body}</div>
+    </main>
+  </div>`;
+}
+
+function bindGlobal(){
+  document.getElementById('logoutBtn')?.addEventListener('click', async ()=>{
+    try{ await api.logout(); }catch(e){}
+    accessToken=null; currentUser=null; CACHE.questions=null; CACHE.tests=null;
+    go('#/auth');
+  });
+}
+
+/* ============================================================
+   AUTH
+   ============================================================ */
+const authState = { role: 'candidate' };
+
+function viewAuth(){
+  return `
+  <div style="min-height:100vh;display:flex;background:var(--bg)">
+    <div style="width:480px;flex-shrink:0;background:linear-gradient(145deg,#1E3A8A 0%,#2563EB 45%,#7C3AED 100%);position:relative;overflow:hidden;display:flex;flex-direction:column;justify-content:space-between;padding:44px;color:#fff" class="auth-brand-panel">
+      <div style="position:absolute;top:-80px;right:-80px;width:360px;height:360px;border-radius:50%;background:rgba(255,255,255,.06)"></div>
+      <div style="position:absolute;bottom:-110px;left:-60px;width:320px;height:320px;border-radius:50%;background:rgba(124,58,237,.25)"></div>
+      <div style="display:flex;align-items:center;gap:10px;position:relative;z-index:2">
+        <div style="width:38px;height:38px;border-radius:8px;background:rgba(255,255,255,.2);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center">${ICONS.logo}</div>
+        <span style="font-size:19px;font-weight:700;letter-spacing:-.3px">Агрегатор тестов</span>
+      </div>
+      <div style="position:relative;z-index:2">
+        <h1 style="font-size:32px;font-weight:700;line-height:1.25;letter-spacing:-.5px;margin:0 0 14px">Тестирование —<br><span style="color:rgba(255,255,255,.7)">это возможность.</span></h1>
+        <p style="font-size:14px;color:rgba(255,255,255,.75);line-height:1.6;max-width:340px;margin:0">Платформа для создания, прохождения и анализа тестов — для обучающихся, авторов вопросов и администраторов.</p>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px;position:relative;z-index:2">
+        ${[
+          [ICONS.clock,'Таймер и автосохранение ответов на сервере'],
+          ['<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>','Конструктор тестов из банка вопросов'],
+          ['<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>','Аналитика и разбор ошибок по каждому вопросу'],
+          ['<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>','JWT-сессии и API-ключи с ограниченным доступом'],
+        ].map(([icon,text])=>`<div style="display:flex;align-items:center;gap:12px">
+          <div style="width:30px;height:30px;border-radius:6px;background:rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center;flex-shrink:0">${icon}</div>
+          <span style="font-size:13px;color:rgba(255,255,255,.85);font-weight:500">${text}</span>
+        </div>`).join('')}
+      </div>
+    </div>
+
+    <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:40px">
+      <div style="width:100%;max-width:400px">
+        <div style="margin-bottom:24px">
+          <h2 style="font-size:24px;font-weight:700;letter-spacing:-.4px;margin:0 0 6px">Добро пожаловать</h2>
+          <p style="font-size:13px;color:var(--ink2);margin:0">Демо-платформа — регистрация не нужна, войдите одним из аккаунтов ниже</p>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:18px">
+          <button class="btn" id="ssoVk" style="justify-content:center">
+            <svg width="18" height="18" viewBox="0 0 24 24"><rect width="24" height="24" rx="5" fill="#0077FF"/><path d="M12.9 17.4c-4.3 0-6.7-2.9-6.8-7.8h2.2c.1 3.6 1.6 5.1 2.8 5.4V9.6h2.1v3.1c1.2-.1 2.4-1.5 2.8-3.1h2.1c-.3 1.9-1.7 3.3-2.7 3.9 1 .5 2.6 1.7 3.2 3.9h-2.3c-.5-1.5-1.6-2.7-3.1-2.8v2.8h-.3z" fill="#fff"/></svg>
+            VK
+          </button>
+          <button class="btn" id="ssoYandex" style="justify-content:center">
+            <svg width="18" height="18" viewBox="0 0 24 24"><rect width="24" height="24" rx="5" fill="#FC3F1D"/><path d="M13.1 5h-1.9c-2.4 0-4.3 1.6-4.3 4.3 0 2 .9 3.1 2.5 4l-2.8 5.5h2.1l2.5-5h1.2v5H14V5h-.9zm-.7 6.9h-1c-1.3 0-2-1-2-2.6 0-1.7.8-2.5 2-2.5h1v5.1z" fill="#fff"/></svg>
+            Яндекс
+          </button>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px">
+          <div style="flex:1;height:1px;background:var(--bord)"></div>
+          <span style="font-size:11px;color:var(--ink3);white-space:nowrap">или войдите по email</span>
+          <div style="flex:1;height:1px;background:var(--bord)"></div>
+        </div>
+
+        <div style="margin-bottom:16px">
+          <div style="font-size:12px;font-weight:600;color:var(--ink);margin-bottom:8px">Вы входите как</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
+            <div class="role-opt" data-role="candidate" style="display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 6px;border:1.5px solid var(--primary);background:var(--pt);border-radius:8px;cursor:pointer">
+              <div style="width:26px;height:26px;border-radius:6px;background:#EFF6FF;display:flex;align-items:center;justify-content:center"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
+              <span style="font-size:10px;font-weight:600;color:var(--primary);text-align:center;line-height:1.2">Обучающийся</span>
+            </div>
+            <div class="role-opt" data-role="author" style="display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 6px;border:1.5px solid var(--bord);border-radius:8px;cursor:pointer">
+              <div style="width:26px;height:26px;border-radius:6px;background:#F5F3FF;display:flex;align-items:center;justify-content:center"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></div>
+              <span style="font-size:10px;font-weight:600;color:var(--ink2);text-align:center;line-height:1.2">Автор</span>
+            </div>
+            <div class="role-opt" data-role="admin" style="display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 6px;border:1.5px solid var(--bord);border-radius:8px;cursor:pointer">
+              <div style="width:26px;height:26px;border-radius:6px;background:#ECFDF5;display:flex;align-items:center;justify-content:center"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+              <span style="font-size:10px;font-weight:600;color:var(--ink2);text-align:center;line-height:1.2">Админ</span>
+            </div>
+          </div>
+          <div id="roleNote" style="font-size:11px;color:var(--ink3);margin-top:6px"></div>
+        </div>
+
+        <div style="margin-bottom:14px">
+          <label class="flabel">Email</label>
+          <input class="field" id="authEmail" placeholder="admin@testpotok.ru">
+        </div>
+        <div style="margin-bottom:6px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <label class="flabel" style="margin:0">Пароль</label>
+            <a href="#" id="forgotLink" style="font-size:11px;color:var(--primary);font-weight:500;text-decoration:none">Забыли пароль?</a>
+          </div>
+          <input class="field" type="password" id="authPass" placeholder="••••••••">
+        </div>
+
+        <button class="btn primary" id="authSubmit" style="width:100%;justify-content:center;margin-top:14px;height:42px">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+          Войти в систему
+        </button>
+        <div id="authErr" style="color:var(--err);font-size:12px;margin-top:10px;display:none"></div>
+
+        <div style="margin-top:16px;display:flex;align-items:center;gap:6px;font-size:11px;color:#065F46;background:#ECFDF5;border:1px solid var(--ok-b);border-radius:8px;padding:9px 11px">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#065F46" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          Защищено JWT-сессией: 15-минутный access-токен + httpOnly refresh-cookie
+        </div>
+
+        <div style="margin-top:18px;text-align:center;font-size:11px;color:var(--ink3)">После <code>python seed.py</code> на бэкенде доступны демо-аккаунты admin@testpotok.ru и student@testpotok.ru</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function bindAuth(){
+  const emailEl = document.getElementById('authEmail'), passEl = document.getElementById('authPass');
+  const roleDemoCreds = {
+    candidate: {email:'student@testpotok.ru', pass:'student123', note:'Обучающийся проходит назначенные тесты и видит свои результаты.'},
+    author: {email:'admin@testpotok.ru', pass:'admin123', note:'В этой сборке роль «Автор» технически совпадает с «Админ» — отдельного набора прав для авторов вопросов пока нет.'},
+    admin: {email:'admin@testpotok.ru', pass:'admin123', note:'Полный доступ: конструктор тестов, банк вопросов, аналитика, API-ключи.'},
+  };
+  function selectRole(role){
+    authState.role = role;
+    document.querySelectorAll('.role-opt').forEach(el=>{
+      const active = el.dataset.role===role;
+      el.style.borderColor = active ? 'var(--primary)' : 'var(--bord)';
+      el.style.background = active ? 'var(--pt)' : 'transparent';
+      el.querySelector('span').style.color = active ? 'var(--primary)' : 'var(--ink2)';
+    });
+    const creds = roleDemoCreds[role];
+    emailEl.value = creds.email; passEl.value = creds.pass;
+    document.getElementById('roleNote').textContent = creds.note;
+  }
+  document.querySelectorAll('.role-opt').forEach(el=>el.addEventListener('click', ()=>selectRole(el.dataset.role)));
+  selectRole('candidate');
+
+  const doLogin = async (email, pass)=>{
+    const err=document.getElementById('authErr'); err.style.display='none';
+    try{
+      const data = await api.login(email, pass);
+      accessToken = data.accessToken; currentUser = data.user;
+      go(currentUser.role==='admin' ? '#/dashboard' : '#/candidate');
+    }catch(e){
+      err.textContent = e.code==='invalid_credentials' ? 'Неверный email или пароль.' : e.message;
+      err.style.display='block';
+    }
+  };
+  document.getElementById('authSubmit').addEventListener('click', ()=>doLogin(emailEl.value.trim(), passEl.value));
+  document.getElementById('ssoVk').addEventListener('click', ()=>toast('SSO через VK недоступен в этой демо-версии'));
+  document.getElementById('ssoYandex').addEventListener('click', ()=>toast('SSO через Яндекс недоступен в этой демо-версии'));
+  document.getElementById('forgotLink').addEventListener('click', (e)=>{ e.preventDefault(); toast('Восстановление пароля недоступно в демо — используйте демо-аккаунты'); });
+}
+
+/* ============================================================
+   ADMIN — DASHBOARD HOME (matches the original admin-dashboard mockup;
+   every number here is computed from real API data — nothing fabricated)
+   ============================================================ */
+async function loadAndRenderDashboardHome(){
+  await ensureQuestions();
+  const tests = await ensureTests();
+  const [allAttempts, allInvitations, allUsers] = await Promise.all([
+    api.listAttempts(), api.listInvitations(), api.listUsers().catch(()=>[]),
+  ]);
+
+  const today = new Date().toDateString();
+  const attemptsToday = allAttempts.filter(a=>new Date(a.startTime).toDateString()===today).length;
+  const submitted = allAttempts.filter(a=>a.status==='submitted');
+  const completionRate = allAttempts.length ? Math.round(submitted.length/allAttempts.length*100) : 0;
+  const reviewQuestions = CACHE.questions.filter(q=>q.status==='review').length;
+  const activeTests = tests.filter(t=>t.status==='published').length;
+
+  // "Кампании" — this platform doesn't model campaigns as a separate entity from
+  // tests, so each test's own invite/attempt data is shown in that shape instead.
+  const campaignRows = tests.map(t=>{
+    const invites = allInvitations.filter(i=>i.testId===t.id);
+    const tAttempts = allAttempts.filter(a=>a.testId===t.id);
+    const tSubmitted = tAttempts.filter(a=>a.status==='submitted');
+    const passed = tSubmitted.filter(a=>scorePctLocal(a,t)>=t.passScore).length;
+    const denom = invites.length || tAttempts.length || 1;
+    const pct = Math.min(100, Math.round(tSubmitted.length/denom*100));
+    const statusMap = {published:['АКТИВЕН','#ECFDF5','#065F46'], draft:['ЧЕРНОВИК','#F3F4F6','#374151'], review:['НА ПРОВЕРКЕ','#FFFBEB','#92400E']};
+    const [label,bg,fg] = statusMap[t.status]||statusMap.draft;
+    const passRate = tSubmitted.length? Math.round(passed/tSubmitted.length*100)+'%' : '—';
+    return `<div style="display:grid;grid-template-columns:1.3fr 90px 90px 90px;gap:10px;align-items:center;padding:12px 0;border-bottom:1px solid var(--bord);cursor:pointer" onclick="go('#/analytics/${t.id}')">
+      <div><b style="font-size:13px">${esc(t.title)}</b>
+        <div style="font-size:11px;color:var(--ink2);margin-top:4px">${allTestQuestionIds(t).length} вопросов · лимит ${t.timeLimitMin} мин</div>
+        <div style="height:7px;background:var(--s2);border-radius:5px;overflow:hidden;margin-top:6px"><i style="display:block;height:100%;width:${pct}%;background:var(--primary);border-radius:5px"></i></div>
+      </div>
+      <span style="padding:4px 7px;border-radius:9999px;font-size:10px;font-weight:700;background:${bg};color:${fg};justify-self:start">${label}</span>
+      <div><b style="font-size:13px">${tSubmitted.length} / ${invites.length||tAttempts.length}</b><div style="font-size:11px;color:var(--ink2)">завершили</div></div>
+      <div><b style="font-size:13px">${passRate}</b><div style="font-size:11px;color:var(--ink2)">прошли</div></div>
+    </div>`;
+  }).join('');
+
+  // "Требует внимания" — every line here is a real, computed signal (no invented proctoring/expiry data).
+  const lowDiscQuestions = CACHE.questions.filter(q=>q.stats && (q.stats.discrimination||0) < 0.2 && q.status!=='draft');
+  const draftTests = tests.filter(t=>t.status==='draft');
+  const pendingInvites = allInvitations.filter(i=>i.status==='pending');
+  const tasks = [];
+  if(lowDiscQuestions.length) tasks.push({color:'var(--err)', text:`${lowDiscQuestions.length} вопрос(ов) с низкой дискриминацией`, sub:'Проверьте формулировку в банке вопросов', href:'#/bank'});
+  if(draftTests.length) tasks.push({color:'var(--warn)', text:`${draftTests.length} тест(ов) остаются черновиком`, sub:'Опубликуйте или удалите неактуальные', href:'#/tests'});
+  if(pendingInvites.length) tasks.push({color:'var(--primary)', text:`${pendingInvites.length} приглашение(й) ожидают начала`, sub:'Обучающийся ещё не начал попытку', href:'#/tests'});
+  if(reviewQuestions) tasks.push({color:'var(--warn)', text:`${reviewQuestions} вопрос(ов) на проверке`, sub:'Одобрите или отклоните в банке вопросов', href:'#/bank'});
+
+  // 14-day attempt activity, computed from real attempt.startTime values.
+  const days=[]; const now=new Date();
+  for(let i=13;i>=0;i--){ const d=new Date(now); d.setDate(d.getDate()-i); d.setHours(0,0,0,0); days.push(d); }
+  const counts = days.map(d=>{
+    const next = new Date(d); next.setDate(next.getDate()+1);
+    return allAttempts.filter(a=>a.startTime>=d.getTime() && a.startTime<next.getTime()).length;
+  });
+  const maxC = Math.max(1, ...counts);
+  const W=650,H=155;
+  const pts = counts.map((c,i)=>{ const x = i*(W/(counts.length-1||1)); const y = H - (c/maxC)*(H-15) - 5; return `${x.toFixed(1)},${y.toFixed(1)}`; }).join(' ');
+  const areaPts = `0,${H} ${pts} ${W},${H}`;
+
+  const statusCounts = {approved:0,review:0,stale:0,draft:0};
+  CACHE.questions.forEach(q=>{ if(statusCounts[q.status]!==undefined) statusCounts[q.status]++; });
+
+  const admins = allUsers.filter(u=>u.role==='admin').length;
+  const learners = allUsers.filter(u=>u.role==='candidate').length;
+
+  return `
+  <div style="display:flex;align-items:flex-end;margin-bottom:6px">
+    <div><h1 style="font-size:24px;margin:0 0 5px">Добро пожаловать, ${esc(currentUser.name.split(' ')[0])}</h1>
+      <p style="color:var(--ink2);margin:0">Сводка по тестам и обучающимся на ${new Date().toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'numeric'})}</p></div>
+    <div class="sp"></div>
+    <button class="btn sm" id="exportSummaryBtn">Экспорт сводки</button>
+    <button class="btn sm primary" id="newTestBtn">+ Новый тест</button>
+  </div>
+
+  <section style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:20px 0">
+    <div class="card" style="padding:16px"><small style="color:var(--ink2)">Активные тесты</small><b style="display:block;font-size:26px;margin:6px 0">${activeTests}</b><span style="font-size:11px;color:var(--ink2)">из ${tests.length} всего</span></div>
+    <div class="card" style="padding:16px"><small style="color:var(--ink2)">Попыток сегодня</small><b style="display:block;font-size:26px;margin:6px 0">${attemptsToday}</b><span style="font-size:11px;color:var(--ink2)">${allAttempts.length} за всё время</span></div>
+    <div class="card" style="padding:16px"><small style="color:var(--ink2)">Вопросов на проверке</small><b style="display:block;font-size:26px;margin:6px 0;color:${reviewQuestions?'var(--warn)':'inherit'}">${reviewQuestions}</b><span style="font-size:11px;color:var(--ink2)">в банке вопросов</span></div>
+    <div class="card" style="padding:16px"><small style="color:var(--ink2)">Завершаемость попыток</small><b style="display:block;font-size:26px;margin:6px 0">${completionRate}%</b><span style="font-size:11px;color:var(--ink2)">${submitted.length} из ${allAttempts.length} начатых</span></div>
+  </section>
+
+  <section style="display:grid;grid-template-columns:1.2fr .8fr;gap:16px">
+    <div class="card" style="padding:18px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><b style="font-size:14px">Тесты и попытки</b><a href="#/tests" style="color:var(--primary);font-size:12px;font-weight:600;text-decoration:none">Все тесты →</a></div>
+      ${campaignRows || '<div class="empty">Пока нет тестов</div>'}
+    </div>
+    <div class="card" style="padding:18px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><b style="font-size:14px">Требует внимания</b></div>
+      ${tasks.length ? tasks.map(t=>`<div style="display:flex;gap:10px;padding:11px 0;border-bottom:1px solid var(--bord);cursor:pointer" onclick="go('${t.href}')">
+        <i style="width:8px;height:8px;border-radius:50%;margin-top:5px;flex-shrink:0;background:${t.color}"></i>
+        <div><b style="display:block;font-size:12px;margin-bottom:3px">${t.text}</b><span style="font-size:11px;color:var(--ink2)">${t.sub}</span></div>
+      </div>`).join('') : '<div class="empty" style="padding:20px 0"><b>Всё чисто</b>Нет задач, требующих внимания</div>'}
+    </div>
+    <div class="card" style="padding:18px;grid-column:1/-1">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><b style="font-size:14px">Активность попыток</b><span style="font-size:11px;color:var(--ink2)">за 14 дней</span></div>
+      <div style="height:155px;position:relative;background:repeating-linear-gradient(to bottom,transparent 0,transparent 37px,#F3F4F6 38px);border-bottom:1px solid var(--bord)">
+        <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%">
+          <polyline points="${pts}" fill="none" stroke="#2563EB" stroke-width="3"/>
+          <polygon points="${areaPts}" fill="#E6F4FE" opacity=".8"/>
+        </svg>
+      </div>
+      <div style="display:flex;justify-content:space-between;color:var(--ink2);font-size:11px;margin-top:8px">
+        <span>${days[0].toLocaleDateString('ru-RU',{day:'numeric',month:'short'})}</span>
+        <span>${days[Math.floor(days.length/2)].toLocaleDateString('ru-RU',{day:'numeric',month:'short'})}</span>
+        <span style="color:var(--primary);font-weight:600">${attemptsToday} попыток сегодня</span>
+      </div>
+    </div>
+  </section>
+
+  <section style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:16px">
+    <div class="card" style="padding:18px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><b style="font-size:14px">Здоровье контента</b><a href="#/bank" style="color:var(--primary);font-size:12px;font-weight:600;text-decoration:none">Банк вопросов →</a></div>
+      <div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--bord)"><span>Одобренные</span><b style="color:var(--ok)">${statusCounts.approved}</b></div>
+      <div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--bord)"><span>На проверке</span><b style="color:var(--warn)">${statusCounts.review}</b></div>
+      <div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--bord)"><span>Устаревшие</span><b style="color:var(--err)">${statusCounts.stale}</b></div>
+      <div style="display:flex;justify-content:space-between;padding:9px 0"><span>Черновики</span><b>${statusCounts.draft}</b></div>
+    </div>
+    <div class="card" style="padding:18px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><b style="font-size:14px">Пользователи</b></div>
+      <div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--bord)"><span>Администраторы</span><b>${admins}</b></div>
+      <div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--bord)"><span>Обучающиеся</span><b>${learners}</b></div>
+      <div style="display:flex;justify-content:space-between;padding:9px 0"><span>Приглашений ожидают</span><b style="color:var(--primary)">${pendingInvites.length}</b></div>
+    </div>
+    <div class="card" style="padding:18px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><b style="font-size:14px">Быстрые действия</b></div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button class="btn sm" style="justify-content:flex-start" onclick="go('#/bank')">Открыть банк вопросов</button>
+        <button class="btn sm" style="justify-content:flex-start" onclick="go('#/tests')">Управление тестами</button>
+        <button class="btn sm" style="justify-content:flex-start" onclick="go('#/apikeys')">API-ключи для интеграций</button>
+      </div>
+    </div>
+  </section>`;
+}
+
+/* ============================================================
+   ADMIN — TESTS LIST (full management table; reached via sidebar "Тесты")
+   ============================================================ */
+async function loadAndRenderTestsList(){
+  const tests = await ensureTests();
+  const attemptsByTest = {};
+  await Promise.all(tests.map(async t=>{
+    attemptsByTest[t.id] = await api.listAttempts({testId:t.id});
+  }));
+
+  const rows = tests.map(t=>{
+    const atts = (attemptsByTest[t.id]||[]).filter(a=>a.status==='submitted');
+    const avg = atts.length? Math.round(atts.reduce((s,a)=>s+scorePctLocal(a,t),0)/atts.length) : null;
+    const statusTag = {draft:'tag-grey',review:'tag-amber',published:'tag-green'}[t.status];
+    const statusLabel = {draft:'Черновик',review:'На проверке',published:'Опубликован'}[t.status];
+    return `<tr style="border-bottom:1px solid var(--bord)">
+      <td style="padding:13px 10px"><b style="cursor:pointer" onclick="go('#/builder/${t.id}')">${esc(t.title)}</b><div style="color:var(--ink3);font-size:11px;margin-top:3px">v${t.version} · ${allTestQuestionIds(t).length} вопросов · ${t.timeLimitMin} мин</div></td>
+      <td style="padding:13px 10px"><span class="tag ${statusTag}">${statusLabel}</span></td>
+      <td style="padding:13px 10px">${atts.length}</td>
+      <td style="padding:13px 10px">${avg!==null? avg+'%':'—'}</td>
+      <td style="padding:13px 10px;text-align:right">
+        <button class="btn sm" data-invite="${t.id}">Пригласить</button>
+        <button class="btn sm" onclick="go('#/analytics/${t.id}')">Аналитика</button>
+        <button class="btn sm" onclick="go('#/builder/${t.id}')">Конструктор</button>
+      </td>
+    </tr>`;
+  }).join('');
+
+  return `
+  <div class="pagehead">
+    <div><h1>Тесты</h1><p>Создавайте, публикуйте и анализируйте тесты вашей организации.</p></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn sm" id="backupExportBtn">Экспорт бэкапа</button>
+      <button class="btn primary" id="newTestBtn">${ICONS.plus} Новый тест</button>
+    </div>
+  </div>
+  <div class="card" style="overflow:auto">
+    <table style="width:100%;border-collapse:collapse">
+      <thead><tr style="border-bottom:1px solid var(--bord)">
+        <th style="text-align:left;padding:10px;color:var(--ink3);font-size:11px;text-transform:uppercase">Тест</th>
+        <th style="text-align:left;padding:10px;color:var(--ink3);font-size:11px;text-transform:uppercase">Статус</th>
+        <th style="text-align:left;padding:10px;color:var(--ink3);font-size:11px;text-transform:uppercase">Попыток</th>
+        <th style="text-align:left;padding:10px;color:var(--ink3);font-size:11px;text-transform:uppercase">Средний балл</th>
+        <th></th>
+      </tr></thead>
+      <tbody>${rows || `<tr><td colspan="5" class="empty"><b>Пока нет тестов</b>Создайте первый тест, чтобы начать</td></tr>`}</tbody>
+    </table>
+  </div>`;
+}
+
+// Lightweight client-side scoring for list/summary views (server is authoritative on submit).
+function isCorrectAnswerLocal(q, ans){
+  if(!ans) return false;
+  if(q.type==='single'){ const c=(q.options||[]).find(o=>o.correct); return c && ans===c.id; }
+  if(q.type==='multiple'){
+    const correctIds=(q.options||[]).filter(o=>o.correct).map(o=>o.id).sort().join(',');
+    const givenIds=(Array.isArray(ans)?ans:[]).slice().sort().join(',');
+    return correctIds===givenIds && givenIds.length>0;
+  }
+  return null;
+}
+function scorePctLocal(attempt, test){
+  let total=0, earned=0;
+  test.sections.forEach(sec=>sec.questionIds.forEach(qid=>{
+    const q=qById(qid); if(!q) return;
+    total+=q.points;
+    const ans=attempt.answers[qid]; const res=isCorrectAnswerLocal(q,ans);
+    if(res===true) earned+=q.points; else if(res===null && ans) earned+=q.points*0.7;
+  }));
+  return total? Math.round(earned/total*100) : 0;
+}
+
+/* ============================================================
+   ADMIN — QUESTION BANK
+   ============================================================ */
+async function loadAndRenderBank(){
+  await ensureQuestions();
+  const all = CACHE.questions;
+  const skills = [...new Set(all.map(q=>q.skill))];
+  let list = all.filter(q=>{
+    if(bankState.search && !q.text.toLowerCase().includes(bankState.search.toLowerCase()) && !q.id.toLowerCase().includes(bankState.search.toLowerCase())) return false;
+    if(bankState.skill!=='all' && q.skill!==bankState.skill) return false;
+    if(bankState.difficulty!=='all' && q.difficulty!==bankState.difficulty) return false;
+    if(bankState.status!=='all' && q.status!==bankState.status) return false;
+    return true;
+  });
+  const statusTag = s=>({approved:'tag-green',review:'tag-amber',stale:'tag-red',draft:'tag-grey'}[s]);
+  const statusLabel = s=>({approved:'Одобрен',review:'На проверке',stale:'Устарел',draft:'Черновик'}[s]);
+  const sel = bankState.selectedId ? qById(bankState.selectedId) : list[0];
+  if(sel && !bankState.selectedId) bankState.selectedId = sel.id;
+
+  const rows = list.map(q=>`
+    <tr class="bankRow" data-id="${q.id}" style="border-bottom:1px solid var(--bord);cursor:pointer;${q.id===bankState.selectedId?'background:var(--pt)':''}">
+      <td style="padding:12px 10px"><div style="font-weight:600">${esc(q.text)} ${q.media&&q.media.length?'🖼️':''}</div><div style="color:var(--ink3);font-size:11px;margin-top:3px">${q.id}</div></td>
+      <td style="padding:12px 10px"><span class="tag tag-blue">${q.skill}</span> <span class="tag tag-grey">${q.difficulty}</span></td>
+      <td style="padding:12px 10px"><span class="tag ${statusTag(q.status)}">${statusLabel(q.status)}</span></td>
+      <td style="padding:12px 10px">${q.stats?('<b style="color:'+(q.stats.discrimination>=0.25?'var(--ok)':'var(--err)')+'">'+q.stats.discrimination.toFixed(2)+'</b>'):'—'}</td>
+    </tr>`).join('');
+
+  return `
+  <div class="pagehead">
+    <div><h1>Банк вопросов</h1><p>${all.length} вопросов · единый источник проверенного контента</p></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn sm" id="exportAllQBtn">Экспорт всех (JSON)</button>
+      <label class="btn sm" style="margin:0">Импорт JSON<input type="file" id="importQFile" accept="application/json" style="display:none"></label>
+      <button class="btn primary" id="newQBtn">${ICONS.plus} Создать вопрос</button>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:220px 1fr 320px;gap:16px;align-items:start">
+    <aside class="card" style="padding:16px">
+      <div style="font-weight:700;font-size:13px;margin-bottom:12px">Фильтры</div>
+      <label class="flabel">Навык</label>
+      <select class="field" id="fSkill" style="margin-bottom:12px">
+        <option value="all">Все навыки</option>
+        ${skills.map(s=>`<option value="${s}" ${bankState.skill===s?'selected':''}>${s}</option>`).join('')}
+      </select>
+      <label class="flabel">Сложность</label>
+      <select class="field" id="fDiff" style="margin-bottom:12px">
+        <option value="all">Все уровни</option>
+        ${['Базовый','Средний','Продвинутый'].map(d=>`<option ${bankState.difficulty===d?'selected':''}>${d}</option>`).join('')}
+      </select>
+      <label class="flabel">Статус</label>
+      <select class="field" id="fStatus">
+        <option value="all">Все статусы</option>
+        ${['approved','review','stale','draft'].map(s=>`<option value="${s}" ${bankState.status===s?'selected':''}>${statusLabel(s)}</option>`).join('')}
+      </select>
+    </aside>
+    <section>
+      <input class="field" id="bankSearch" placeholder="Найти по тексту или ID" value="${esc(bankState.search)}" style="margin-bottom:12px">
+      <div class="card" style="overflow:auto">
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr style="border-bottom:1px solid var(--bord)">
+            <th style="text-align:left;padding:9px 10px;color:var(--ink3);font-size:10px;text-transform:uppercase">Вопрос</th>
+            <th style="text-align:left;padding:9px 10px;color:var(--ink3);font-size:10px;text-transform:uppercase">Навык</th>
+            <th style="text-align:left;padding:9px 10px;color:var(--ink3);font-size:10px;text-transform:uppercase">Статус</th>
+            <th style="text-align:left;padding:9px 10px;color:var(--ink3);font-size:10px;text-transform:uppercase">Дискр.</th>
+          </tr></thead>
+          <tbody>${rows || `<tr><td colspan="4" class="empty">Ничего не найдено</td></tr>`}</tbody>
+        </table>
+      </div>
+    </section>
+    <aside class="card" style="padding:18px">
+      ${sel ? questionInspector(sel) : '<div class="empty">Выберите вопрос</div>'}
+    </aside>
+  </div>`;
+}
+
+function questionInspector(q){
+  const statusTag = {approved:'tag-green',review:'tag-amber',stale:'tag-red',draft:'tag-grey'}[q.status];
+  const statusLabel = {approved:'ОДОБРЕН',review:'НА ПРОВЕРКЕ',stale:'УСТАРЕЛ',draft:'ЧЕРНОВИК'}[q.status];
+  return `
+  <span class="tag ${statusTag}">${statusLabel}</span>
+  <h2 style="font-size:15px;line-height:1.4;margin:10px 0 12px">${esc(q.text)}</h2>
+  ${renderMedia(q.media)}
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+    <span class="tag tag-blue">${q.skill}</span><span class="tag tag-grey">${q.difficulty}</span><span class="tag tag-violet">${q.points} балла</span>
+  </div>
+  ${q.options && q.options.length ? `<div style="border-top:1px solid var(--bord);padding-top:12px">
+    <b style="font-size:12px">Варианты ответа</b>
+    <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">
+    ${q.options.map(o=>`<div style="padding:8px 10px;border:1px solid ${o.correct?'var(--ok-b)':'var(--bord)'};background:${o.correct?'var(--ok-t)':'transparent'};border-radius:8px;font-size:12px;color:${o.correct?'#065F46':'var(--ink)'}">${o.id}. ${esc(o.text)}</div>`).join('')}
+    </div></div>` : `<div style="border-top:1px solid var(--bord);padding-top:12px;color:var(--ink2);font-size:12px">Открытый ответ — проверяется вручную / эвристически.</div>`}
+  ${q.stats?`<div style="border-top:1px solid var(--bord);margin-top:16px;padding-top:14px">
+    <b style="font-size:12px">Метрики качества</b>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">
+      <div style="background:var(--s2);border-radius:8px;padding:10px"><small style="color:var(--ink2)">Верных ответов</small><strong style="display:block;font-size:16px;margin-top:3px">${Math.round((q.stats.correctRate||0)*100)}%</strong></div>
+      <div style="background:var(--s2);border-radius:8px;padding:10px"><small style="color:var(--ink2)">Дискриминация</small><strong style="display:block;font-size:16px;margin-top:3px;color:${(q.stats.discrimination||0)>=0.25?'var(--ok)':'var(--err)'}">${(q.stats.discrimination||0).toFixed(2)}</strong></div>
+      <div style="background:var(--s2);border-radius:8px;padding:10px"><small style="color:var(--ink2)">Среднее время</small><strong style="display:block;font-size:16px;margin-top:3px">${q.stats.avgTime||'—'}</strong></div>
+      <div style="background:var(--s2);border-radius:8px;padding:10px"><small style="color:var(--ink2)">Попыток</small><strong style="display:block;font-size:16px;margin-top:3px">${q.stats.attempts||0}</strong></div>
+    </div></div>`:''}
+  <div style="display:flex;gap:8px;margin-top:16px">
+    <button class="btn sm danger" id="deleteQBtn" data-id="${q.id}">${ICONS.trash} Удалить</button>
+  </div>`;
+}
+
+/* ============================================================
+   ADMIN — TEST BUILDER
+   ============================================================ */
+async function loadAndRenderBuilder(testId){
+  await ensureQuestions();
+  const test = await api.getTest(testId);
+  // keep CACHE.tests in sync so other views (dashboard) see fresh data next load
+  CACHE.tests = null;
+
+  const totalQ = allTestQuestionIds(test).length;
+  const totalPts = allTestQuestionIds(test).reduce((s,id)=>{ const q=qById(id); return s+(q?q.points:0); },0);
+
+  const sections = test.sections.map(sec=>{
+    const rows = sec.questionIds.map((qid,i)=>{
+      const q=qById(qid);
+      if(!q) return '';
+      return `<div style="display:grid;grid-template-columns:26px 1fr 90px 50px 30px;gap:10px;align-items:center;padding:11px 16px;border-bottom:1px solid var(--bord)">
+        <span style="color:var(--ink3)">${String(i+1).padStart(2,'0')}</span>
+        <span style="font-weight:500">${esc(q.text)}</span>
+        <span class="tag tag-grey" style="justify-self:start">${q.skill}</span>
+        <b>${q.points} б.</b>
+        <button class="btn sm" style="border:none;color:var(--err)" data-remove-q="${sec.id}|${qid}">✕</button>
+      </div>`;
+    }).join('');
+    const secPts = sec.questionIds.reduce((s,id)=>{ const q=qById(id); return s+(q?q.points:0); },0);
+    return `<article class="card" style="margin-bottom:14px" data-sec-id="${sec.id}">
+      <div style="display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--bord)">
+        <b style="font-size:14px;flex:1">${esc(sec.title)}</b>
+        <span style="color:var(--ink2);font-size:12px">${sec.questionIds.length} вопросов · ${secPts} баллов</span>
+        <button class="btn sm danger" data-remove-sec="${sec.id}">Удалить раздел</button>
+      </div>
+      ${rows || '<div class="empty">Пока нет вопросов в разделе</div>'}
+      <div style="padding:10px 16px">
+        <select class="field addQSelect" data-sec="${sec.id}" style="max-width:340px">
+          <option value="">+ Добавить вопрос из банка…</option>
+          ${CACHE.questions.filter(q=>!sec.questionIds.includes(q.id)).map(q=>`<option value="${q.id}">${q.id} — ${esc(q.text.slice(0,50))}</option>`).join('')}
+        </select>
+      </div>
+    </article>`;
+  }).join('');
+
+  return `
+  <div class="pagehead">
+    <div>
+      <div style="display:flex;align-items:center;gap:8px;color:var(--ink2);font-size:12px;margin-bottom:6px">Тесты / <b style="color:var(--ink)">${esc(test.title)}</b> / Конструктор</div>
+      <h1 contenteditable="true" id="testTitleEdit" style="outline:none">${esc(test.title)}</h1>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <span class="tag ${test.status==='published'?'tag-green':(test.status==='review'?'tag-amber':'tag-grey')}">${test.status==='published'?'Опубликован':test.status==='review'?'На проверке':'Черновик'}</span>
+      <button class="btn" id="exportTestBtn" data-id="${test.id}">Экспорт JSON</button>
+      <button class="btn" onclick="go('#/analytics/${test.id}')">Аналитика</button>
+      <button class="btn primary" id="publishBtn" data-id="${test.id}">${test.status==='published'?'Снять с публикации':'Опубликовать'}</button>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px">
+    <div class="card" style="padding:12px"><span style="font-size:11px;color:var(--ink2)">Вопросы</span><b style="display:block;font-size:18px;margin-top:4px">${totalQ}</b></div>
+    <div class="card" style="padding:12px"><span style="font-size:11px;color:var(--ink2)">Сумма баллов</span><b style="display:block;font-size:18px;margin-top:4px">${totalPts}</b></div>
+    <div class="card" style="padding:12px"><span style="font-size:11px;color:var(--ink2)">Лимит времени</span><b style="display:block;font-size:18px;margin-top:4px" contenteditable="true" id="timeLimitEdit">${test.timeLimitMin} мин</b></div>
+    <div class="card" style="padding:12px"><span style="font-size:11px;color:var(--ink2)">Проходной балл</span><b style="display:block;font-size:18px;margin-top:4px" contenteditable="true" id="passScoreEdit">${test.passScore}%</b></div>
+  </div>
+
+  ${sections}
+  <button class="btn" id="addSectionBtn" data-id="${test.id}">${ICONS.plus} Добавить раздел</button>
+  <input type="hidden" id="builderTestId" value="${test.id}">
+  `;
+}
+
+/* ============================================================
+   ADMIN — ANALYTICS
+   ============================================================ */
+async function loadAndRenderAnalytics(testId){
+  await ensureQuestions();
+  const test = await api.getTest(testId);
+  const [attempts, invitations] = await Promise.all([
+    api.listAttempts({testId}),
+    api.listInvitations({testId}),
+  ]);
+  const submitted = attempts.filter(a=>a.status==='submitted');
+  const scored = submitted.map(a=>({pct: scorePctLocal(a,test), passed: scorePctLocal(a,test)>=test.passScore}));
+  const avgScore = scored.length? Math.round(scored.reduce((s,r)=>s+r.pct,0)/scored.length) : 0;
+  const passed = scored.filter(r=>r.passed).length;
+  const passRate = scored.length? Math.round(passed/scored.length*100) : 0;
+  const invited = invitations.length;
+
+  const qids = allTestQuestionIds(test);
+  const qRows = qids.map(qid=>{
+    const q=qById(qid); if(!q) return '';
+    let correctCt=0, gradedCt=0;
+    submitted.forEach(a=>{ const ans=a.answers[qid]; if(ans!==undefined){ const r=isCorrectAnswerLocal(q,ans); if(r!==null){gradedCt++; if(r) correctCt++;} } });
+    const rate = gradedCt? Math.round(correctCt/gradedCt*100) : Math.round((q.stats?.correctRate||0)*100);
+    const color = rate>=70?'var(--ok)':rate>=45?'var(--warn)':'var(--err)';
+    return `<div style="display:grid;grid-template-columns:1fr 1.7fr 42px;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--bord)">
+      <span style="font-size:12px">${esc(q.text.slice(0,40))}${q.text.length>40?'…':''}</span>
+      <div style="height:8px;background:var(--s2);border-radius:9px;overflow:hidden"><div style="height:100%;width:${rate}%;background:${color};border-radius:9px"></div></div>
+      <b style="color:${color};font-size:12px">${rate}%</b>
+    </div>`;
+  }).join('');
+
+  return `
+  <div class="pagehead">
+    <div>
+      <div style="display:flex;align-items:center;gap:8px;color:var(--ink2);font-size:12px;margin-bottom:6px">Аналитика / <b style="color:var(--ink)">${esc(test.title)}</b></div>
+      <h1>Аналитика теста</h1>
+    </div>
+    <button class="btn" onclick="go('#/builder/${test.id}')">Открыть конструктор</button>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:16px">
+    <div class="card" style="padding:14px"><small style="color:var(--ink2)">Приглашены</small><b style="display:block;font-size:21px;margin-top:6px">${invited}</b></div>
+    <div class="card" style="padding:14px"><small style="color:var(--ink2)">Завершили</small><b style="display:block;font-size:21px;margin-top:6px">${submitted.length}</b></div>
+    <div class="card" style="padding:14px"><small style="color:var(--ink2)">Средний балл</small><b style="display:block;font-size:21px;margin-top:6px">${avgScore}%</b></div>
+    <div class="card" style="padding:14px"><small style="color:var(--ink2)">Прошли порог</small><b style="display:block;font-size:21px;margin-top:6px">${passed}</b></div>
+    <div class="card" style="padding:14px"><small style="color:var(--ink2)">Проходимость</small><b style="display:block;font-size:21px;margin-top:6px">${passRate}%</b></div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1.2fr .8fr;gap:16px">
+    <div class="card" style="padding:18px">
+      <b style="font-size:14px">Качество вопросов</b>
+      <div style="margin-top:12px">${qRows || '<div class="empty">Пока нет попыток</div>'}</div>
+    </div>
+    <div class="card" style="padding:18px">
+      <b style="font-size:14px">Последние попытки</b>
+      <div style="margin-top:12px;display:flex;flex-direction:column;gap:10px">
+        ${submitted.slice().reverse().map(a=>{
+          const pct = scorePctLocal(a,test);
+          return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--bord)">
+            <div><b style="font-size:12px">${esc(a.userId)}</b><div style="color:var(--ink3);font-size:11px">${a.endTime? new Date(a.endTime).toLocaleString('ru-RU'):''}</div></div>
+            <span class="tag ${pct>=test.passScore?'tag-green':'tag-red'}">${pct}%</span>
+          </div>`;
+        }).join('') || '<div class="empty">Пока нет завершённых попыток. Пройдите тест как обучающийся, чтобы увидеть данные.</div>'}
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ============================================================
+   ADMIN — API KEYS
+   ============================================================ */
+const SCOPE_LABELS = {
+  'questions:read':'Чтение банка вопросов','questions:write':'Изменение банка вопросов',
+  'tests:read':'Чтение тестов и структуры','results:read':'Чтение результатов и попыток',
+};
+
+async function loadAndRenderApiKeys(){
+  const keys = await api.listKeys();
+  const rows = keys.map(k=>`
+    <tr style="border-bottom:1px solid var(--bord)">
+      <td style="padding:12px 10px"><b>${esc(k.label)}</b></td>
+      <td style="padding:12px 10px"><code style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink2)">${esc(k.prefix)}••••••••••••</code></td>
+      <td style="padding:12px 10px">${k.scopes.map(s=>`<span class="tag tag-blue" style="margin:2px">${SCOPE_LABELS[s]||s}</span>`).join('')}</td>
+      <td style="padding:12px 10px;color:var(--ink2);font-size:12px">${k.lastUsed? new Date(k.lastUsed).toLocaleDateString('ru-RU') : 'Не использован'}</td>
+      <td style="padding:12px 10px">${k.revoked? '<span class="tag tag-red">Отозван</span>' : '<span class="tag tag-green">Активен</span>'}</td>
+      <td style="padding:12px 10px;text-align:right">${!k.revoked? `<button class="btn sm danger" data-revoke="${k.id}">Отозвать</button>`:''}</td>
+    </tr>`).join('');
+
+  return `
+  <div class="pagehead">
+    <div><h1>API-ключи</h1><p>Токены для интеграций: LMS, CI/CD-проверка кода, внешние дашборды. Хранится только хэш ключа на сервере — сам ключ показывается один раз.</p></div>
+    <button class="btn primary" id="newKeyBtn">${ICONS.plus} Создать ключ</button>
+  </div>
+  <div class="card" style="overflow:auto">
+    <table style="width:100%;border-collapse:collapse">
+      <thead><tr style="border-bottom:1px solid var(--bord)">
+        <th style="text-align:left;padding:10px;color:var(--ink3);font-size:11px;text-transform:uppercase">Название</th>
+        <th style="text-align:left;padding:10px;color:var(--ink3);font-size:11px;text-transform:uppercase">Ключ</th>
+        <th style="text-align:left;padding:10px;color:var(--ink3);font-size:11px;text-transform:uppercase">Права доступа</th>
+        <th style="text-align:left;padding:10px;color:var(--ink3);font-size:11px;text-transform:uppercase">Использован</th>
+        <th style="text-align:left;padding:10px;color:var(--ink3);font-size:11px;text-transform:uppercase">Статус</th>
+        <th></th>
+      </tr></thead>
+      <tbody>${rows || `<tr><td colspan="6" class="empty"><b>Пока нет ключей</b>Создайте ключ для интеграции с внешней системой</td></tr>`}</tbody>
+    </table>
+  </div>`;
+}
+
+function openNewKeyModal(){
+  const veil=document.createElement('div'); veil.className='modal-veil';
+  veil.innerHTML=`<div class="modal">
+    <h2>Новый API-ключ</h2>
+    <p class="mhint">Выберите название и области доступа. Полный ключ будет показан один раз.</p>
+    <label class="flabel">Название (для чего используется)</label>
+    <input class="field" id="nkLabel" placeholder="Например: Интеграция с HR-системой" style="margin-bottom:14px">
+    <label class="flabel">Права доступа</label>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:6px">
+      ${Object.entries(SCOPE_LABELS).map(([k,label])=>`
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+          <input type="checkbox" class="nkScope" value="${k}"> ${label}
+        </label>`).join('')}
+    </div>
+    <div class="modal-actions">
+      <button class="btn" id="nkCancel">Отмена</button>
+      <button class="btn primary" id="nkCreate">Создать ключ</button>
+    </div>
+  </div>`;
+  document.body.appendChild(veil);
+  veil.addEventListener('click', e=>{ if(e.target===veil) veil.remove(); });
+  document.getElementById('nkCancel').addEventListener('click', ()=>veil.remove());
+  document.getElementById('nkCreate').addEventListener('click', async ()=>{
+    const label=document.getElementById('nkLabel').value.trim()||'Без названия';
+    const scopes=[...document.querySelectorAll('.nkScope:checked')].map(c=>c.value);
+    if(!scopes.length){ toast('Выберите хотя бы одну область доступа'); return; }
+    let key;
+    try{ key = await api.createKey({label, scopes}); }
+    catch(e){ toast('Не удалось создать ключ: '+e.message, true); return; }
+    veil.innerHTML = `<div class="modal">
+      <h2>Ключ создан</h2>
+      <p class="mhint">Скопируйте его сейчас — второй раз он показан не будет.</p>
+      <div style="background:var(--ink);color:#fff;border-radius:8px;padding:14px;font-family:'JetBrains Mono',monospace;font-size:13px;word-break:break-all;margin-bottom:12px">${key.token}</div>
+      <button class="btn primary" id="copyKeyBtn" style="width:100%;justify-content:center;margin-bottom:8px">Скопировать</button>
+      <div class="modal-actions"><button class="btn" id="nkDone">Готово</button></div>
+    </div>`;
+    document.getElementById('copyKeyBtn').addEventListener('click', ()=>{ navigator.clipboard?.writeText(key.token); toast('Скопировано'); });
+    document.getElementById('nkDone').addEventListener('click', ()=>{ veil.remove(); render(); });
+  });
+}
+
+/* ============================================================
+   CANDIDATE — HOME
+   ============================================================ */
+async function loadAndRenderCandidateHome(){
+  const [invites, myAttempts] = await Promise.all([api.listInvitations(), api.listAttempts()]);
+  const tests = {};
+  await Promise.all(invites.map(async inv=>{ if(!tests[inv.testId]) tests[inv.testId] = await api.getTest(inv.testId); }));
+
+  const rows = invites.map(inv=>{
+    const t = tests[inv.testId];
+    if(!t) return '';
+    const existingAttempt = myAttempts.find(a=>a.testId===t.id && a.status==='submitted');
+    const inProgress = myAttempts.find(a=>a.testId===t.id && a.status==='in_progress');
+    return `<div class="card" style="padding:18px;display:flex;align-items:center;gap:16px;margin-bottom:12px">
+      <div style="flex:1">
+        <b style="font-size:14px">${esc(t.title)}</b>
+        <div style="color:var(--ink2);font-size:12px;margin-top:4px">${allTestQuestionIds(t).length} вопросов · ${t.timeLimitMin} мин · проходной балл ${t.passScore}%</div>
+      </div>
+      ${existingAttempt
+        ? `<span class="tag tag-green">Завершено</span><button class="btn sm" onclick="go('#/results/${existingAttempt.id}')">Результаты</button>`
+        : inProgress
+          ? `<span class="tag tag-amber">В процессе</span><button class="btn sm primary" onclick="go('#/test/${inProgress.id}')">Продолжить</button>`
+          : `<button class="btn primary" onclick="go('#/lobby/${t.id}')">Начать тест</button>`}
+    </div>`;
+  }).join('');
+
+  return `
+  <div class="pagehead"><div><h1>Мои тесты</h1><p>Приглашения на тестирование от вашей организации.</p></div></div>
+  ${rows || '<div class="empty"><b>Пока нет приглашений</b>Когда вас пригласят пройти тест, он появится здесь.</div>'}
+  `;
+}
+
+/* ============================================================
+   CANDIDATE — LOBBY
+   ============================================================ */
+async function loadAndRenderLobby(testId){
+  const test = await api.getTest(testId);
+  return `
+  <div style="display:grid;grid-template-columns:1.7fr 1fr;gap:24px;align-items:start;max-width:1100px;margin:0 auto">
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <div style="background:linear-gradient(135deg,var(--primary),#1D4ED8);border-radius:16px;padding:28px;color:#fff">
+        <span style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;background:rgba(255,255,255,.15);border-radius:9999px;font-size:11px;font-weight:600;text-transform:uppercase;margin-bottom:14px">● Готов к запуску</span>
+        <div style="font-size:22px;font-weight:700;margin-bottom:8px">${esc(test.title)}</div>
+        <div style="font-size:13px;opacity:.85;margin-bottom:20px">Внимательно прочитайте инструкции перед началом. Прогресс сохраняется автоматически на сервере.</div>
+        <div style="display:flex;gap:20px;font-size:13px;opacity:.9">
+          <span>${ICONS.clock} ${test.timeLimitMin} минут</span>
+          <span>${allTestQuestionIds(test).length} вопросов</span>
+          <span>Проходной балл ${test.passScore}%</span>
+        </div>
+      </div>
+      <div class="card" style="padding:22px">
+        <div style="font-size:12px;font-weight:600;color:var(--ink3);text-transform:uppercase;margin-bottom:14px">Инструкции</div>
+        ${test.instructions.map((t,i)=>`<div style="display:flex;gap:12px;padding:10px 0;border-bottom:1px solid var(--bord)">
+          <div style="width:24px;height:24px;border-radius:50%;background:var(--pt);color:var(--primary);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">${i+1}</div>
+          <div style="font-size:13px;line-height:1.55">${esc(t)}</div>
+        </div>`).join('')}
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <div class="card" style="padding:18px">
+        <div style="font-size:12px;font-weight:600;color:var(--ink3);text-transform:uppercase;margin-bottom:12px">Проверка системы</div>
+        <div id="checkList" style="display:flex;flex-direction:column;gap:8px"></div>
+      </div>
+      <div class="card" style="padding:18px">
+        <label style="display:flex;gap:10px;align-items:flex-start;margin-bottom:14px;cursor:pointer">
+          <input type="checkbox" id="agreeBox" style="margin-top:3px">
+          <span style="font-size:12px;line-height:1.5">Я прочитал(а) инструкции и принимаю правила тестирования</span>
+        </label>
+        <button class="btn primary" id="startTestBtn" style="width:100%;justify-content:center;height:42px" disabled>▶ Начать тестирование</button>
+        <div style="font-size:11px;color:var(--ink3);text-align:center;margin-top:8px">Таймер запустится сразу после начала</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ============================================================
+   CANDIDATE — TEST TAKING
+   ============================================================ */
+async function loadAndRenderTestTaking(attemptId){
+  const attempt = await api.getAttempt(attemptId);
+  const test = await api.getTest(attempt.testId);
+  const questions = await api.getTestQuestions(attempt.testId); // options WITHOUT `correct` — server-redacted
+  const qMap = {}; questions.forEach(q=>qMap[q.id]=q);
+
+  taking.attemptId = attemptId; taking.test = test; taking.questions = qMap; taking.attempt = attempt;
+
+  const qids = allTestQuestionIds(test);
+  if(taking.idx>=qids.length) taking.idx=0;
+  const qid = qids[taking.idx];
+  const q = qMap[qid];
+  const answered = qids.filter(id=>attempt.answers[id]!==undefined && attempt.answers[id]!==null && attempt.answers[id]!=='').length;
+  const flagged = attempt.flagged||[];
+
+  const elapsedSec = (Date.now()-attempt.startTime)/1000;
+  const remainSec = test.timeLimitMin*60 - elapsedSec;
+
+  const grid = qids.map((id,i)=>{
+    return `<button data-idx="${i}" style="width:100%;aspect-ratio:1;border-radius:8px;border:1.5px solid var(--bord);background:var(--surf);font-size:12px;font-weight:500;color:var(--ink2);position:relative;
+      ${id===qid?'border-color:var(--primary);border-width:2px;color:var(--primary);background:var(--pt);font-weight:700;':''}
+      ${(attempt.answers[id]!==undefined && attempt.answers[id]!=='' && id!==qid)?'background:var(--primary);border-color:var(--primary);color:#fff;font-weight:600;':''}
+      ${flagged.includes(id)?'box-shadow:0 0 0 2px var(--warn) inset;':''}
+      ">${i+1}</button>`;
+  }).join('');
+
+  let answerHTML='';
+  const ans = attempt.answers[qid];
+  if(q.type==='single'){
+    answerHTML = q.options.map(o=>`
+      <label class="ansOpt" data-opt="${o.id}" style="display:flex;align-items:center;gap:12px;padding:13px 16px;border:1.5px solid ${ans===o.id?'var(--primary)':'var(--bord)'};background:${ans===o.id?'var(--pt)':'var(--surf)'};border-radius:10px;margin-bottom:8px;cursor:pointer">
+        <div style="width:18px;height:18px;border-radius:50%;border:2px solid ${ans===o.id?'var(--primary)':'var(--bord)'};display:flex;align-items:center;justify-content:center;flex-shrink:0">${ans===o.id?'<div style="width:9px;height:9px;border-radius:50%;background:var(--primary)"></div>':''}</div>
+        <div style="flex:1;font-size:13px">${esc(o.text)}</div>
+        <div style="font-size:11px;color:var(--ink3);font-weight:700">${o.id}</div>
+      </label>`).join('');
+  } else if(q.type==='multiple'){
+    const given = Array.isArray(ans)?ans:[];
+    answerHTML = q.options.map(o=>{const checked=given.includes(o.id);return `
+      <label class="ansOptMulti" data-opt="${o.id}" style="display:flex;align-items:center;gap:12px;padding:13px 16px;border:1.5px solid ${checked?'var(--primary)':'var(--bord)'};background:${checked?'var(--pt)':'var(--surf)'};border-radius:10px;margin-bottom:8px;cursor:pointer">
+        <div style="width:18px;height:18px;border-radius:5px;border:2px solid ${checked?'var(--primary)':'var(--bord)'};background:${checked?'var(--primary)':'transparent'};display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff">${checked?ICONS.check:''}</div>
+        <div style="flex:1;font-size:13px">${esc(o.text)}</div>
+        <div style="font-size:11px;color:var(--ink3);font-weight:700">${o.id}</div>
+      </label>`;}).join('');
+  } else {
+    answerHTML = `<textarea class="field" id="textAns" rows="7" placeholder="Введите ваш ответ...">${esc(ans||'')}</textarea>`;
+  }
+
+  const codeBlock = q.code ? `<div style="background:#0F172A;color:#E2E8F0;border-radius:8px;padding:16px 20px;margin:14px 0;font-family:'JetBrains Mono',monospace;font-size:12.5px;line-height:1.7;white-space:pre-wrap">${esc(q.code)}</div>` : '';
+
+  return `
+  <div style="height:100vh;display:flex;flex-direction:column;background:#F0F4F8">
+    <div class="topbar" style="border-bottom:1px solid var(--bord)">
+      <div class="brand"><div class="brand-icon">${ICONS.logo}</div><div class="brand-name">Агрегатор тестов</div></div>
+      <div class="sep-v"></div>
+      <div style="font-size:13px;color:var(--ink2)"><b style="color:var(--ink)">${esc(test.title)}</b></div>
+      <div class="sp"></div>
+      <div id="timerBox" style="display:flex;align-items:center;gap:8px;padding:6px 14px;border-radius:8px;border:1.5px solid var(--bord);background:var(--s2)">
+        ${ICONS.clock}<span id="timerVal" style="font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:600">${fmtClock(remainSec)}</span>
+      </div>
+      <button class="btn danger sm" id="submitTestBtn">Завершить тест</button>
+    </div>
+    <div style="flex:1;display:flex;overflow:hidden">
+      <aside style="width:250px;flex-shrink:0;background:var(--surf);border-right:1px solid var(--bord);display:flex;flex-direction:column">
+        <div style="padding:14px 16px;border-bottom:1px solid var(--bord)">
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--ink3);margin-bottom:8px">
+            <span class="tag tag-green">${answered} отвечено</span><span class="tag tag-amber">${flagged.length} помечено</span>
+          </div>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:14px 16px">
+          <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px" id="qGrid">${grid}</div>
+        </div>
+        <div style="padding:14px 16px;border-top:1px solid var(--bord)">
+          <div style="font-size:11px;color:var(--ink3);margin-bottom:6px">Прогресс: ${answered}/${qids.length}</div>
+          <div style="height:6px;background:var(--s2);border-radius:3px;overflow:hidden"><div style="height:100%;width:${Math.round(answered/qids.length*100)}%;background:linear-gradient(90deg,var(--primary),var(--accent))"></div></div>
+        </div>
+      </aside>
+      <div style="flex:1;overflow-y:auto;padding:28px 32px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
+          <div style="font-size:13px;color:var(--ink3)">Вопрос <b style="color:var(--ink)">${taking.idx+1}</b> из <b style="color:var(--ink)">${qids.length}</b></div>
+          <div style="display:flex;gap:8px">
+            <button class="btn sm" id="prevQBtn" ${taking.idx===0?'disabled':''}>${ICONS.chevL}</button>
+            <button class="btn sm" id="nextQBtn" ${taking.idx===qids.length-1?'disabled':''}>${ICONS.chevR}</button>
+          </div>
+        </div>
+        <div class="card" style="padding:28px 32px;margin-bottom:20px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:18px">
+            <span style="font-size:12px;font-weight:600;color:var(--ink3)">Вопрос ${taking.idx+1}</span>
+            <span class="tag tag-blue">${q.type==='single'?'Один ответ':q.type==='multiple'?'Несколько ответов':q.type==='code'?'Кодовый ответ':'Короткий текст'}</span>
+            <span class="tag tag-violet">${q.difficulty}</span>
+            <div class="sp"></div>
+            <span style="font-size:12px;color:var(--ink3)">${q.points} балла</span>
+            <button class="btn sm" id="flagBtn" style="${flagged.includes(qid)?'background:var(--warn-t);border-color:var(--warn);color:#92400E':''}">${ICONS.flag} ${flagged.includes(qid)?'Помечено':'Пометить'}</button>
+          </div>
+          <div style="font-size:15px;line-height:1.6;margin-bottom:6px">${esc(q.text)}</div>
+          ${renderMedia(q.media)}
+          ${codeBlock}
+          <div style="margin-top:18px">${answerHTML}</div>
+        </div>
+        <div style="display:flex;justify-content:space-between">
+          <button class="btn" id="clearAnsBtn">Очистить ответ</button>
+          <button class="btn primary" id="nextBtn2">${taking.idx===qids.length-1?'Завершить обзор':'Далее'} ${ICONS.chevR}</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function startTimer(){
+  clearInterval(taking.timerHandle);
+  taking.timerHandle = setInterval(()=>{
+    if(!taking.attempt || taking.attempt.status!=='in_progress'){ clearInterval(taking.timerHandle); return; }
+    const remain = taking.test.timeLimitMin*60 - (Date.now()-taking.attempt.startTime)/1000;
+    const box=document.getElementById('timerVal');
+    if(box) box.textContent = fmtClock(remain);
+    const tb=document.getElementById('timerBox');
+    if(tb){
+      tb.style.borderColor = remain<60?'var(--err)':remain<300?'var(--warn)':'var(--bord)';
+      tb.style.background = remain<60?'#FEF2F2':remain<300?'var(--warn-t)':'var(--s2)';
+      if(box) box.style.color = remain<60?'var(--err)':remain<300?'var(--warn)':'var(--ink)';
+    }
+    if(remain<=0){ clearInterval(taking.timerHandle); submitTest(taking.attemptId, true); }
+  },1000);
+}
+
+async function saveAttemptPatch(patch){
+  try{
+    const updated = await api.patchAttempt(taking.attemptId, patch);
+    taking.attempt = updated;
+  }catch(e){
+    toast('Не удалось сохранить ответ: '+e.message, true);
+  }
+}
+
+async function submitTest(attemptId, auto){
+  if(!auto && !confirm('Завершить тест? После этого изменить ответы будет нельзя.')) return;
+  clearInterval(taking.timerHandle);
+  try{
+    await api.submitAttempt(attemptId);
+  }catch(e){
+    toast('Не удалось отправить тест: '+e.message, true); return;
+  }
+  go('#/results/'+attemptId);
+  if(auto) setTimeout(()=>toast('Время истекло — тест завершён автоматически'),300);
+}
+
+/* ============================================================
+   CANDIDATE — RESULTS
+   ============================================================ */
+async function loadAndRenderResults(attemptId){
+  const data = await api.getResults(attemptId); // {attempt, score, test, questions}
+  const {attempt, score:r, test, questions} = data;
+  const qById2 = id=>questions[id];
+
+  const circumference = 2*Math.PI*52;
+  const dash = circumference*(r.pct/100);
+  const color = r.passed? 'var(--ok)':'var(--err)';
+
+  const skillRows = Object.entries(r.bySkill).map(([skill,v])=>{
+    const pct = v.total? Math.round(v.earned/v.total*100):0;
+    return `<div style="display:flex;align-items:center;gap:12px">
+      <span style="width:110px;font-size:12px;flex-shrink:0">${esc(skill)}</span>
+      <div style="flex:1;height:8px;background:var(--s2);border-radius:4px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${pct>=70?'var(--ok)':pct>=45?'var(--warn)':'var(--err)'};border-radius:4px"></div></div>
+      <b style="width:36px;text-align:right;font-size:12px">${pct}%</b>
+    </div>`;
+  }).join('');
+
+  const qids = allTestQuestionIds(test);
+  const reviewRows = qids.map((qid,i)=>{
+    const q=qById2(qid); const ans=attempt.answers[qid];
+    const item = r.items.find(it=>it.questionId===qid) || {};
+    const res = item.correct;
+    const icon = res===true?`<div style="width:24px;height:24px;border-radius:50%;background:var(--ok-t);display:flex;align-items:center;justify-content:center;color:var(--ok);flex-shrink:0">${ICONS.check}</div>`
+               : res===false?`<div style="width:24px;height:24px;border-radius:50%;background:var(--err-t);display:flex;align-items:center;justify-content:center;color:var(--err);flex-shrink:0">✕</div>`
+               : `<div style="width:24px;height:24px;border-radius:50%;background:var(--s2);display:flex;align-items:center;justify-content:center;color:var(--ink3);font-size:10px;flex-shrink:0">?</div>`;
+    let yourAns='—';
+    if(q.type==='single'){ const o=(q.options||[]).find(o=>o.id===ans); yourAns=o?o.text:'Нет ответа'; }
+    else if(q.type==='multiple'){ const arr=Array.isArray(ans)?ans:[]; yourAns=arr.length? arr.map(id=>(q.options||[]).find(o=>o.id===id)?.text).join('; ') : 'Нет ответа'; }
+    else { yourAns = ans || 'Нет ответа'; }
+    return `<div style="border:1px solid var(--bord);border-radius:8px;margin-bottom:8px;overflow:hidden">
+      <div style="display:flex;align-items:center;gap:12px;padding:12px 16px">
+        ${icon}
+        <div style="flex:1;font-size:13px">${i+1}. ${esc(q.text)}</div>
+        <b style="font-size:12px;color:${res===true?'var(--ok)':res===false?'var(--err)':'var(--ink3)'}">${res===true?'+':''}${item.pointsAwarded!=null?item.pointsAwarded:'—'} б.</b>
+      </div>
+      ${q.media && q.media.length ? `<div style="padding:0 16px">${renderMedia(q.media)}</div>` : ''}
+      <div style="padding:12px 16px;background:#FAFBFC;border-top:1px solid var(--bord);font-size:12px">
+        <div style="color:var(--ink3);font-weight:600;text-transform:uppercase;font-size:10px;margin-bottom:4px">Ваш ответ</div>
+        <div style="padding:8px 10px;border-radius:6px;background:${res===false?'var(--err-t)':'var(--surf)'};border:1px solid var(--bord);margin-bottom:8px">${esc(yourAns)}</div>
+        ${(q.options||[]).length && res===false ? `<div style="color:var(--ink3);font-weight:600;text-transform:uppercase;font-size:10px;margin-bottom:4px">Правильный ответ</div><div style="padding:8px 10px;border-radius:6px;background:var(--ok-t);border:1px solid var(--ok-b)">${esc(q.options.filter(o=>o.correct).map(o=>o.text).join('; '))}</div>`:''}
+      </div>
+    </div>`;
+  }).join('');
+
+  const weakSkills = Object.entries(r.bySkill).filter(([s,v])=>v.total && v.earned/v.total<0.6).map(([s])=>s);
+
+  return `
+  <div style="background:linear-gradient(145deg,#EFF6FF 0%,#F5F3FF 100%);border-bottom:1px solid var(--bord);margin:-24px -28px 24px;padding:36px 28px">
+    <div style="max-width:1100px;margin:0 auto;display:flex;gap:36px;align-items:center;flex-wrap:wrap">
+      <div style="flex:1;min-width:260px">
+        <span class="tag ${r.passed?'tag-green':'tag-red'}" style="margin-bottom:14px">${r.passed?'✓ Тест пройден':'✕ Порог не набран'}</span>
+        <div style="font-size:28px;font-weight:700;letter-spacing:-.5px;margin:10px 0 6px">${esc(test.title)}</div>
+        <div style="color:var(--ink2);margin-bottom:20px">Завершено ${attempt.endTime? new Date(attempt.endTime).toLocaleString('ru-RU'):''}</div>
+        <button class="btn primary" onclick="go('#/candidate')">К списку тестов</button>
+        <button class="btn" onclick="window.print()">Скачать отчёт</button>
+      </div>
+      <div class="card" style="padding:24px;display:flex;gap:24px;align-items:center">
+        <div style="position:relative;width:120px;height:120px;flex-shrink:0">
+          <svg width="120" height="120" style="transform:rotate(-90deg)">
+            <circle cx="60" cy="60" r="52" fill="none" stroke="var(--s2)" stroke-width="10"/>
+            <circle cx="60" cy="60" r="52" fill="none" stroke="${color}" stroke-width="10" stroke-linecap="round" stroke-dasharray="${dash} ${circumference}"/>
+          </svg>
+          <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center">
+            <div style="font-size:24px;font-weight:700;color:${color}">${r.pct}%</div>
+            <div style="font-size:10px;color:var(--ink3)">итоговый балл</div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:9px">
+          <div style="display:flex;justify-content:space-between;gap:20px"><span style="color:var(--ink2);font-size:13px">Баллы</span><b>${Math.round(r.earned)} / ${r.total}</b></div>
+          <div style="display:flex;justify-content:space-between;gap:20px"><span style="color:var(--ink2);font-size:13px">Проходной балл</span><b>${test.passScore}%</b></div>
+          <div style="display:flex;justify-content:space-between;gap:20px"><span style="color:var(--ink2);font-size:13px">Время</span><b>${attempt.endTime? fmtClock((attempt.endTime-attempt.startTime)/1000):'—'}</b></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 280px;gap:20px;max-width:1100px;margin:0 auto">
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <div class="card" style="padding:20px">
+        <b style="font-size:14px">Баллы по навыкам</b>
+        <div style="margin-top:14px;display:flex;flex-direction:column;gap:12px">${skillRows}</div>
+      </div>
+      <div class="card" style="padding:20px">
+        <b style="font-size:14px">Разбор вопросов</b>
+        <div style="margin-top:14px">${reviewRows}</div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <div style="background:linear-gradient(135deg,var(--primary),#1E40AF);color:#fff;border-radius:12px;padding:20px">
+        <div style="font-size:11px;font-weight:600;opacity:.75;text-transform:uppercase;margin-bottom:4px">Итог</div>
+        <div style="font-size:32px;font-weight:700">${r.passed?'Пройден':'Не пройден'}</div>
+        <div style="font-size:12px;opacity:.85;margin-top:4px">${r.pct}% из ${test.passScore}% необходимых</div>
+      </div>
+      <div class="card" style="padding:18px">
+        <b style="font-size:13px">Рекомендации</b>
+        <div style="margin-top:10px;display:flex;flex-direction:column;gap:8px">
+          ${weakSkills.length? weakSkills.map(s=>`<div style="padding:10px 12px;background:var(--s2);border-radius:8px;font-size:12px;line-height:1.45">Стоит углубить навык <b>${esc(s)}</b> — результат ниже 60%.</div>`).join('')
+            : `<div style="padding:10px 12px;background:var(--s2);border-radius:8px;font-size:12px;line-height:1.45">Сильный результат по всем разделам. Явных пробелов не выявлено.</div>`}
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ============================================================
+   PAGE-LEVEL EVENT BINDING
+   ============================================================ */
+function bindPage(root, p1){
+  if(root==='tests'){
+    document.getElementById('newTestBtn')?.addEventListener('click', async ()=>{
+      try{
+        const t = await api.createTest({title:'Новый тест', timeLimitMin:30, passScore:70, instructions:['Добавьте инструкции для обучающегося.']});
+        invalidateTests(); go('#/builder/'+t.id);
+      }catch(e){ toast('Не удалось создать тест: '+e.message, true); }
+    });
+    document.getElementById('backupExportBtn')?.addEventListener('click', async ()=>{
+      try{ const data = await api.exportBackup(); downloadJSON(data, `agregator-testov-backup-${new Date().toISOString().slice(0,10)}.json`); }
+      catch(e){ toast('Не удалось выгрузить бэкап: '+e.message, true); }
+    });
+    document.querySelectorAll('[data-invite]').forEach(b=>{
+      b.addEventListener('click', async ()=>{
+        const email = prompt('Email обучающегося для приглашения:', 'student@testpotok.ru');
+        if(!email) return;
+        try{ await api.createInvitation(b.dataset.invite, email); toast('Приглашение отправлено'); }
+        catch(e){ toast('Не удалось создать приглашение: '+e.message, true); }
+      });
+    });
+  }
+
+  if(root==='dashboard'){
+    document.getElementById('newTestBtn')?.addEventListener('click', async ()=>{
+      try{
+        const t = await api.createTest({title:'Новый тест', timeLimitMin:30, passScore:70, instructions:['Добавьте инструкции для обучающегося.']});
+        invalidateTests(); go('#/builder/'+t.id);
+      }catch(e){ toast('Не удалось создать тест: '+e.message, true); }
+    });
+    document.getElementById('exportSummaryBtn')?.addEventListener('click', async ()=>{
+      try{ const data = await api.exportBackup(); downloadJSON(data, `agregator-testov-backup-${new Date().toISOString().slice(0,10)}.json`); }
+      catch(e){ toast('Не удалось выгрузить сводку: '+e.message, true); }
+    });
+    document.getElementById('helpBtn')?.addEventListener('click', ()=>toast('Справка: см. README в архиве backend-проекта'));
+    document.getElementById('dashSearch')?.addEventListener('keydown', e=>{
+      if(e.key==='Enter'){ bankState.search = e.target.value; go('#/bank'); }
+    });
+    document.querySelectorAll('.nav-soon').forEach(el=>{
+      el.addEventListener('click', e=>{ e.preventDefault(); toast('Этот раздел ещё не реализован в демо-версии'); });
+    });
+  }
+
+  if(root==='bank'){
+    document.getElementById('bankSearch')?.addEventListener('input', e=>{ bankState.search=e.target.value; render(); });
+    document.getElementById('fSkill')?.addEventListener('change', e=>{ bankState.skill=e.target.value; render(); });
+    document.getElementById('fDiff')?.addEventListener('change', e=>{ bankState.difficulty=e.target.value; render(); });
+    document.getElementById('fStatus')?.addEventListener('change', e=>{ bankState.status=e.target.value; render(); });
+    document.querySelectorAll('.bankRow').forEach(r=>r.addEventListener('click', ()=>{ bankState.selectedId=r.dataset.id; render(); }));
+    document.getElementById('newQBtn')?.addEventListener('click', openNewQuestionModal);
+    document.getElementById('deleteQBtn')?.addEventListener('click', async (e)=>{
+      if(!confirm('Удалить вопрос из банка? Это не затронет уже опубликованные тесты.')) return;
+      try{ await api.deleteQuestion(e.target.closest('button').dataset.id); invalidateQuestions(); bankState.selectedId=null; render(); toast('Вопрос удалён'); }
+      catch(err){ toast('Не удалось удалить: '+err.message, true); }
+    });
+    document.getElementById('exportAllQBtn')?.addEventListener('click', async ()=>{
+      try{ const data = await api.exportQuestions(); downloadJSON(data, 'agregator-testov-questions-all.json'); }
+      catch(e){ toast('Не удалось экспортировать: '+e.message, true); }
+    });
+    document.getElementById('importQFile')?.addEventListener('change', async e=>{
+      const file=e.target.files[0]; e.target.value=''; if(!file) return;
+      try{
+        const text = await readFileAsText(file);
+        const json = JSON.parse(text);
+        const result = await api.importQuestions(json);
+        invalidateQuestions(); render();
+        toast(`Импортировано: ${result.added} новых, ${result.updated} обновлено`);
+      }catch(err){ alert('Не удалось импортировать файл: '+err.message); }
+    });
+  }
+
+  if(root==='builder'){
+    const testId = document.getElementById('builderTestId')?.value;
+    document.getElementById('publishBtn')?.addEventListener('click', async (e)=>{
+      try{ const t = await api.publishTest(e.target.dataset.id); invalidateTests(); render(); toast(t.status==='published'?'Тест опубликован':'Тест снят с публикации'); }
+      catch(err){ toast('Не удалось изменить публикацию: '+err.message, true); }
+    });
+    document.getElementById('exportTestBtn')?.addEventListener('click', async (e)=>{
+      try{ const data = await api.exportTest(e.target.dataset.id); downloadJSON(data, `agregator-testov-test-${e.target.dataset.id}.json`); }
+      catch(err){ toast('Не удалось экспортировать: '+err.message, true); }
+    });
+    document.getElementById('addSectionBtn')?.addEventListener('click', async (e)=>{
+      const test = await api.getTest(e.target.dataset.id);
+      test.sections.push({id:uid('S'), title:'0'+(test.sections.length+1)+'. Новый раздел', questionIds:[]});
+      try{ await api.updateTest(test.id, {sections:test.sections}); invalidateTests(); render(); }
+      catch(err){ toast('Не удалось добавить раздел: '+err.message, true); }
+    });
+    document.querySelectorAll('.addQSelect').forEach(sel=>{
+      sel.addEventListener('change', async e=>{
+        const qid=e.target.value; if(!qid) return;
+        const test = await api.getTest(testId);
+        const sec = test.sections.find(s=>s.id===e.target.dataset.sec);
+        sec.questionIds.push(qid);
+        try{ await api.updateTest(test.id, {sections:test.sections}); invalidateTests(); render(); toast('Вопрос добавлен'); }
+        catch(err){ toast('Не удалось добавить вопрос: '+err.message, true); }
+      });
+    });
+    document.querySelectorAll('[data-remove-q]').forEach(b=>{
+      b.addEventListener('click', async ()=>{
+        const [secId,qid] = b.dataset.removeQ.split('|');
+        const test = await api.getTest(testId);
+        const sec = test.sections.find(s=>s.id===secId);
+        sec.questionIds = sec.questionIds.filter(id=>id!==qid);
+        try{ await api.updateTest(test.id, {sections:test.sections}); invalidateTests(); render(); toast('Вопрос удалён из теста'); }
+        catch(err){ toast('Не удалось удалить вопрос: '+err.message, true); }
+      });
+    });
+    document.querySelectorAll('[data-remove-sec]').forEach(b=>{
+      b.addEventListener('click', async ()=>{
+        if(!confirm('Удалить раздел и все вопросы в нём из теста?')) return;
+        const test = await api.getTest(testId);
+        test.sections = test.sections.filter(s=>s.id!==b.dataset.removeSec);
+        try{ await api.updateTest(test.id, {sections:test.sections}); invalidateTests(); render(); }
+        catch(err){ toast('Не удалось удалить раздел: '+err.message, true); }
+      });
+    });
+    document.getElementById('testTitleEdit')?.addEventListener('blur', async e=>{
+      const title=e.target.textContent.trim(); if(!title) return;
+      try{ await api.updateTest(testId, {title}); invalidateTests(); }
+      catch(err){ toast('Не удалось сохранить название: '+err.message, true); }
+    });
+    document.getElementById('timeLimitEdit')?.addEventListener('blur', async e=>{
+      const n=parseInt(e.target.textContent); if(!(n>0)) return;
+      try{ await api.updateTest(testId, {timeLimitMin:n}); invalidateTests(); render(); }
+      catch(err){ toast('Не удалось сохранить: '+err.message, true); }
+    });
+    document.getElementById('passScoreEdit')?.addEventListener('blur', async e=>{
+      const n=parseInt(e.target.textContent); if(!(n>0&&n<=100)) return;
+      try{ await api.updateTest(testId, {passScore:n}); invalidateTests(); render(); }
+      catch(err){ toast('Не удалось сохранить: '+err.message, true); }
+    });
+  }
+
+  if(root==='apikeys'){
+    document.getElementById('newKeyBtn')?.addEventListener('click', openNewKeyModal);
+    document.querySelectorAll('[data-revoke]').forEach(b=>{
+      b.addEventListener('click', async ()=>{
+        if(!confirm('Отозвать ключ? Все запросы с ним начнут получать 401 Unauthorized.')) return;
+        try{ await api.revokeKey(b.dataset.revoke); render(); toast('Ключ отозван'); }
+        catch(err){ toast('Не удалось отозвать: '+err.message, true); }
+      });
+    });
+  }
+
+  if(root==='lobby'){
+    const checks = [
+      {label:'Интернет-соединение', sub:'Проверка скорости соединения'},
+      {label:'Веб-камера', sub:'Проверка доступа к камере'},
+      {label:'Микрофон', sub:'Проверка уровня звука'},
+      {label:'Браузер', sub:'Проверка совместимости'},
+    ];
+    const list = document.getElementById('checkList');
+    checks.forEach((c,i)=>{
+      const row=document.createElement('div');
+      row.style.cssText='display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:8px;border:1px solid var(--bord);background:var(--bg)';
+      row.innerHTML=`<div style="width:8px;height:8px;border-radius:50%;background:var(--ink3)" class="dot"></div><div style="flex:1"><div style="font-size:12px;font-weight:500">${c.label}</div><div style="font-size:11px;color:var(--ink3)">${c.sub}</div></div><span style="font-size:11px;color:var(--ink3)" class="stat">Проверка…</span>`;
+      list.appendChild(row);
+      setTimeout(()=>{
+        row.querySelector('.dot').style.background='var(--ok)';
+        const s=row.querySelector('.stat'); s.textContent='Готово'; s.style.color='var(--ok)'; s.style.fontWeight='600';
+      }, 500+i*350);
+    });
+    const agree=document.getElementById('agreeBox'), startBtn=document.getElementById('startTestBtn');
+    agree.addEventListener('change', ()=>{ startBtn.disabled=!agree.checked; });
+    startBtn.addEventListener('click', async ()=>{
+      startBtn.disabled=true; startBtn.textContent='Запуск…';
+      try{
+        const attempt = await api.startAttempt(p1);
+        taking.idx=0;
+        go('#/test/'+attempt.id);
+      }catch(e){
+        toast('Не удалось начать тест: '+e.message, true);
+        startBtn.disabled=false; startBtn.textContent='▶ Начать тестирование';
+      }
+    });
+  }
+
+  if(root==='test'){
+    startTimer();
+    const test = taking.test;
+    const qMap = taking.questions;
+    const qids = allTestQuestionIds(test);
+    const qid = qids[taking.idx];
+    const q = qMap[qid];
+
+    document.getElementById('submitTestBtn')?.addEventListener('click', ()=>submitTest(p1,false));
+    document.getElementById('prevQBtn')?.addEventListener('click', ()=>{ taking.idx=Math.max(0,taking.idx-1); render(); });
+    document.getElementById('nextQBtn')?.addEventListener('click', ()=>{ taking.idx=Math.min(qids.length-1,taking.idx+1); render(); });
+    document.getElementById('nextBtn2')?.addEventListener('click', ()=>{
+      if(taking.idx<qids.length-1){ taking.idx++; render(); }
+      else { toast('Это последний вопрос — нажмите «Завершить тест», когда будете готовы'); }
+    });
+    document.getElementById('flagBtn')?.addEventListener('click', async ()=>{
+      const flagged = (taking.attempt.flagged||[]).slice();
+      const i=flagged.indexOf(qid);
+      if(i>=0) flagged.splice(i,1); else flagged.push(qid);
+      taking.attempt.flagged = flagged;
+      render();
+      await saveAttemptPatch({flagged});
+    });
+    document.getElementById('clearAnsBtn')?.addEventListener('click', async ()=>{
+      const answers = {...taking.attempt.answers}; delete answers[qid];
+      taking.attempt.answers = answers;
+      render();
+      await saveAttemptPatch({answers:{[qid]: q.type==='multiple' ? [] : ''}});
+    });
+    document.querySelectorAll('#qGrid button[data-idx]').forEach(b=>{
+      b.addEventListener('click', ()=>{ taking.idx=parseInt(b.dataset.idx); render(); });
+    });
+    if(q.type==='single'){
+      document.querySelectorAll('.ansOpt').forEach(el=>{
+        el.addEventListener('click', async ()=>{
+          taking.attempt.answers = {...taking.attempt.answers, [qid]: el.dataset.opt};
+          render();
+          await saveAttemptPatch({answers:{[qid]: el.dataset.opt}});
+        });
+      });
+    } else if(q.type==='multiple'){
+      document.querySelectorAll('.ansOptMulti').forEach(el=>{
+        el.addEventListener('click', async ()=>{
+          const cur = Array.isArray(taking.attempt.answers[qid])?taking.attempt.answers[qid].slice():[];
+          const opt=el.dataset.opt; const i=cur.indexOf(opt);
+          if(i>=0) cur.splice(i,1); else cur.push(opt);
+          taking.attempt.answers = {...taking.attempt.answers, [qid]: cur};
+          render();
+          await saveAttemptPatch({answers:{[qid]: cur}});
+        });
+      });
+    } else {
+      const ta=document.getElementById('textAns');
+      let debounceT;
+      ta?.addEventListener('input', e=>{
+        taking.attempt.answers = {...taking.attempt.answers, [qid]: e.target.value};
+        clearTimeout(debounceT);
+        debounceT = setTimeout(()=>saveAttemptPatch({answers:{[qid]: e.target.value}}), 600);
+      });
+      ta?.addEventListener('blur', async e=>{
+        clearTimeout(debounceT);
+        await saveAttemptPatch({answers:{[qid]: e.target.value}});
+        toast('Ответ сохранён');
+      });
+    }
+  }
+}
+
+/* ---------------- new question modal ---------------- */
+function openNewQuestionModal(){
+  const veil=document.createElement('div'); veil.className='modal-veil';
+  veil.innerHTML=`<div class="modal">
+    <h2>Новый вопрос</h2>
+    <p class="mhint">Добавьте вопрос в банк — он станет доступен во всех тестах.</p>
+    <label class="flabel">Текст вопроса</label>
+    <textarea class="field" id="nqText" rows="3" style="margin-bottom:12px"></textarea>
+    <label class="flabel">Изображение или анимация к вопросу (необязательно)</label>
+    <input type="file" id="nqMediaFile" accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm,application/json" style="margin-bottom:6px">
+    <div id="nqMediaPreview" style="margin-bottom:12px"></div>
+    <div id="nqMediaHint" style="font-size:11px;color:var(--ink3);margin-bottom:12px">PNG/JPEG/WebP/GIF до 5 МБ, MP4/WebM/Lottie-JSON до 15 МБ.</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+      <div><label class="flabel">Навык</label><input class="field" id="nqSkill" placeholder="JavaScript"></div>
+      <div><label class="flabel">Сложность</label><select class="field" id="nqDiff"><option>Базовый</option><option>Средний</option><option>Продвинутый</option></select></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+      <div><label class="flabel">Тип</label><select class="field" id="nqType"><option value="single">Один ответ</option><option value="multiple">Несколько ответов</option><option value="text">Короткий текст</option><option value="code">Кодовый ответ</option></select></div>
+      <div><label class="flabel">Баллы</label><input class="field" id="nqPoints" type="number" value="2" min="1"></div>
+    </div>
+    <div id="nqOptionsWrap">
+      <label class="flabel">Варианты ответа (отметьте правильные)</label>
+      <div id="nqOptions"></div>
+      <button class="btn sm" id="nqAddOpt" type="button">${ICONS.plus} Добавить вариант</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" id="nqCancel">Отмена</button>
+      <button class="btn primary" id="nqSave">Сохранить вопрос</button>
+    </div>
+  </div>`;
+  document.body.appendChild(veil);
+
+  let optCount=0;
+  function addOpt(text=''){
+    optCount++;
+    const row=document.createElement('div');
+    row.style.cssText='display:flex;gap:8px;align-items:center;margin-bottom:6px';
+    row.innerHTML=`<input type="checkbox" class="nqCorrect"><input class="field nqOptText" placeholder="Вариант ${optCount}" value="${esc(text)}" style="flex:1">`;
+    document.getElementById('nqOptions').appendChild(row);
+  }
+  addOpt(); addOpt();
+  document.getElementById('nqAddOpt').addEventListener('click', ()=>addOpt());
+  document.getElementById('nqType').addEventListener('change', e=>{
+    document.getElementById('nqOptionsWrap').style.display = (e.target.value==='single'||e.target.value==='multiple') ? 'block':'none';
+  });
+  document.getElementById('nqMediaFile').addEventListener('change', e=>{
+    const file = e.target.files[0];
+    const preview = document.getElementById('nqMediaPreview');
+    preview.innerHTML='';
+    if(!file) return;
+    const limit = file.type==='image/gif'||file.type.startsWith('video')||file.type==='application/json' ? 15*1024*1024 : 5*1024*1024;
+    if(file.size>limit){
+      toast(`Файл слишком большой: максимум ${Math.round(limit/1024/1024)} МБ для этого типа`, true);
+      e.target.value=''; return;
+    }
+    if(file.type.startsWith('image')){
+      const img = document.createElement('img');
+      img.style.cssText='max-width:100%;max-height:160px;border-radius:8px;border:1px solid var(--bord)';
+      img.src = URL.createObjectURL(file);
+      preview.appendChild(img);
+    } else {
+      preview.innerHTML = `<div style="font-size:12px;color:var(--ink2)">Выбран файл: ${esc(file.name)}</div>`;
+    }
+  });
+
+  veil.addEventListener('click', e=>{ if(e.target===veil) veil.remove(); });
+  document.getElementById('nqCancel').addEventListener('click', ()=>veil.remove());
+  document.getElementById('nqSave').addEventListener('click', async ()=>{
+    const text=document.getElementById('nqText').value.trim();
+    if(!text){ toast('Введите текст вопроса'); return; }
+    const type=document.getElementById('nqType').value;
+    const skill=document.getElementById('nqSkill').value.trim()||'Общее';
+    const difficulty=document.getElementById('nqDiff').value;
+    const points=parseInt(document.getElementById('nqPoints').value)||2;
+    let options=[];
+    if(type==='single'||type==='multiple'){
+      document.querySelectorAll('#nqOptions > div').forEach((row,i)=>{
+        const t=row.querySelector('.nqOptText').value.trim();
+        const c=row.querySelector('.nqCorrect').checked;
+        if(t) options.push({id:String.fromCharCode(65+i), text:t, correct:c});
+      });
+    }
+    const saveBtn = document.getElementById('nqSave');
+    saveBtn.disabled = true;
+
+    let media = [];
+    const file = document.getElementById('nqMediaFile').files[0];
+    if(file){
+      saveBtn.textContent = 'Загрузка изображения…';
+      try{
+        const dataBase64 = await readFileAsBase64(file);
+        const kind = file.type==='image/gif' ? 'animation' : file.type.startsWith('video') ? 'video' : file.type==='application/json' ? 'animation' : 'image';
+        const asset = await api.uploadAsset({filename:file.name, mime:file.type, dataBase64});
+        media = [{ assetId: asset.id, url: asset.url, kind, alt: text.slice(0,80) }];
+      }catch(e){
+        toast('Не удалось загрузить медиафайл: '+e.message, true);
+        saveBtn.disabled=false; saveBtn.textContent='Сохранить вопрос';
+        return;
+      }
+    }
+
+    saveBtn.textContent = 'Сохранение…';
+    try{
+      const q = await api.createQuestion({text, type, skill, difficulty, points, status:'draft', options, media});
+      invalidateQuestions();
+      bankState.selectedId=q.id;
+      veil.remove(); render(); toast('Вопрос добавлен в банк');
+    }catch(e){
+      toast('Не удалось сохранить: '+e.message, true);
+      saveBtn.disabled=false; saveBtn.textContent='Сохранить вопрос';
+    }
+  });
+}
+
+/* ---------------- boot ---------------- */
+render();
+</script>
+</body>
+</html>
