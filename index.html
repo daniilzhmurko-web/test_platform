@@ -118,7 +118,7 @@ svg{display:block}
 // Point this at your deployed API. For local dev against `python app.py`,
 // the default below is already correct.
 const API_BASE = 'https://danis1982.pythonanywhere.com/api';
-  
+
 const ICONS = {
   logo:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>`,
   check:`<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
@@ -226,6 +226,9 @@ const api = {
   listInvitations: (params={})=> apiFetch('/invitations?'+new URLSearchParams(params)),
   createInvitation: (testId,email)=> apiFetch('/invitations', {method:'POST', body:JSON.stringify({testId,email})}),
   listUsers: ()=> apiFetch('/users'),
+  createUser: (data)=> apiFetch('/users', {method:'POST', body:JSON.stringify(data)}),
+  updateUser: (id,data)=> apiFetch('/users/'+id, {method:'PUT', body:JSON.stringify(data)}),
+  deleteUser: (id)=> apiFetch('/users/'+id, {method:'DELETE'}),
 
   listKeys: ()=> apiFetch('/apikeys'),
   createKey: (data)=> apiFetch('/apikeys', {method:'POST', body:JSON.stringify(data)}),
@@ -325,6 +328,7 @@ async function render(){
     else if(root==='builder') body = await loadAndRenderBuilder(p1);
     else if(root==='analytics') body = await loadAndRenderAnalytics(p1);
     else if(root==='apikeys') body = await loadAndRenderApiKeys();
+    else if(root==='users') body = await loadAndRenderUsers();
     else if(root==='candidate') body = await loadAndRenderCandidateHome();
     else if(root==='lobby') body = await loadAndRenderLobby(p1);
     else if(root==='test') body = await loadAndRenderTestTaking(p1);
@@ -347,7 +351,7 @@ async function render(){
 function chrome_(body, root){
   const isAdmin = currentUser.role==='admin';
   const tabs = isAdmin ? [
-    ['tests','Тесты'],['bank','Банк вопросов'],['apikeys','API-ключи'],
+    ['tests','Тесты'],['bank','Банк вопросов'],['users','Пользователи'],['apikeys','API-ключи'],
   ] : [
     ['candidate','Мои тесты'],
   ];
@@ -362,7 +366,7 @@ function chrome_(body, root){
       ${tabs.map(([r,label])=>`<a class="nav-tab ${root===r.split('/')[0]?'active':''}" href="#/${r}">${label}</a>`).join('')}
     </div>
     <div class="sp"></div>
-    <div class="avatar" title="${esc(currentUser.name)}">${esc((currentUser.name||currentUser.email).split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase())}</div>
+    <div class="avatar" title="${esc(currentUser.name)} — профиль" style="cursor:pointer" onclick="openProfileModal()">${esc((currentUser.name||currentUser.email).split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase())}</div>
     <button class="btn sm" id="logoutBtn">Выйти</button>
   </div>
   <div class="page">${body}</div>`;
@@ -381,7 +385,7 @@ function dashboardChrome_(body){
   <div style="min-height:100vh;display:flex;background:var(--bg)">
     <aside style="width:224px;flex-shrink:0;background:#111827;color:#fff;padding:20px 12px;position:relative">
       <div style="font-size:18px;font-weight:700;padding:4px 10px 24px">Агрегатор тестов</div>
-      <div style="background:rgba(255,255,255,.08);padding:10px;border-radius:8px;font-size:12px;margin-bottom:8px">
+      <div style="background:rgba(255,255,255,.08);padding:10px;border-radius:8px;font-size:12px;margin-bottom:8px;cursor:pointer" onclick="openProfileModal()" title="Изменить email/пароль">
         <b style="display:block;font-size:13px;margin-bottom:3px">${esc(currentUser.name)}</b>${esc(currentUser.email)}
       </div>
       ${navSection('ОБЗОР', [
@@ -392,7 +396,7 @@ function dashboardChrome_(body){
         {label:'Тесты', href:'#/tests'},
         {label:'Банк вопросов', href:'#/bank'},
         {label:'Кампании', soon:true},
-        {label:'Обучающиеся', soon:true},
+        {label:'Пользователи', href:'#/users'},
       ])}
       ${navSection('АНАЛИТИКА', [
         {label:'Отчёты', soon:true},
@@ -412,7 +416,7 @@ function dashboardChrome_(body){
         <div class="sp"></div>
         <input class="field" id="dashSearch" placeholder="Поиск тестов, обучающихся, вопросов" style="width:250px;height:33px">
         <button class="btn sm" id="helpBtn">Справка</button>
-        <div class="avatar" title="${esc(currentUser.name)}">${esc((currentUser.name||currentUser.email).split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase())}</div>
+        <div class="avatar" title="${esc(currentUser.name)} — профиль" style="cursor:pointer" onclick="openProfileModal()">${esc((currentUser.name||currentUser.email).split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase())}</div>
       </header>
       <div class="page" style="max-width:1400px">${body}</div>
     </main>
@@ -1100,6 +1104,156 @@ function openNewKeyModal(){
 }
 
 /* ============================================================
+   ADMIN — USERS (create learner/admin logins, edit, deactivate, delete)
+   ============================================================ */
+async function loadAndRenderUsers(){
+  const users = await api.listUsers();
+  const roleLabel = r=>r==='admin'?'Админ':'Обучающийся';
+  const rows = users.map(u=>`
+    <tr style="border-bottom:1px solid var(--bord);${u.active===false?'opacity:.5':''}">
+      <td style="padding:12px 10px"><b>${esc(u.name||'—')}</b>${u.id===currentUser.id?' <span class="tag tag-blue">это вы</span>':''}</td>
+      <td style="padding:12px 10px">${esc(u.email)}</td>
+      <td style="padding:12px 10px"><span class="tag ${u.role==='admin'?'tag-violet':'tag-blue'}">${roleLabel(u.role)}</span></td>
+      <td style="padding:12px 10px">${u.active===false?'<span class="tag tag-red">Деактивирован</span>':'<span class="tag tag-green">Активен</span>'}</td>
+      <td style="padding:12px 10px;text-align:right;white-space:nowrap">
+        <button class="btn sm" data-edit-user="${u.id}">Изменить</button>
+        <button class="btn sm" data-toggle-user="${u.id}" data-active="${u.active!==false}">${u.active===false?'Активировать':'Деактивировать'}</button>
+        <button class="btn sm danger" data-delete-user="${u.id}">${ICONS.trash}</button>
+      </td>
+    </tr>`).join('');
+
+  return `
+  <div class="pagehead">
+    <div><h1>Пользователи</h1><p>Логины для обучающихся и администраторов. ${users.length} всего.</p></div>
+    <button class="btn primary" id="newUserBtn">${ICONS.plus} Создать пользователя</button>
+  </div>
+  <div class="card" style="overflow:auto">
+    <table style="width:100%;border-collapse:collapse">
+      <thead><tr style="border-bottom:1px solid var(--bord)">
+        <th style="text-align:left;padding:10px;color:var(--ink3);font-size:11px;text-transform:uppercase">Имя</th>
+        <th style="text-align:left;padding:10px;color:var(--ink3);font-size:11px;text-transform:uppercase">Email</th>
+        <th style="text-align:left;padding:10px;color:var(--ink3);font-size:11px;text-transform:uppercase">Роль</th>
+        <th style="text-align:left;padding:10px;color:var(--ink3);font-size:11px;text-transform:uppercase">Статус</th>
+        <th></th>
+      </tr></thead>
+      <tbody>${rows || `<tr><td colspan="5" class="empty">Пока нет пользователей</td></tr>`}</tbody>
+    </table>
+  </div>`;
+}
+
+function openNewUserModal(){
+  const veil=document.createElement('div'); veil.className='modal-veil';
+  veil.innerHTML=`<div class="modal">
+    <h2>Новый пользователь</h2>
+    <p class="mhint">Придумайте пароль и передайте его этому человеку лично — отдельной рассылки писем в этой сборке нет.</p>
+    <label class="flabel">Имя</label>
+    <input class="field" id="nuName" placeholder="Иван Иванов" style="margin-bottom:12px">
+    <label class="flabel">Email (логин)</label>
+    <input class="field" id="nuEmail" placeholder="ivan@example.com" style="margin-bottom:12px">
+    <label class="flabel">Пароль</label>
+    <input class="field" id="nuPass" type="text" placeholder="минимум 6 символов" style="margin-bottom:12px">
+    <label class="flabel">Роль</label>
+    <select class="field" id="nuRole" style="margin-bottom:14px">
+      <option value="candidate">Обучающийся</option>
+      <option value="admin">Админ</option>
+    </select>
+    <div class="modal-actions">
+      <button class="btn" id="nuCancel">Отмена</button>
+      <button class="btn primary" id="nuCreate">Создать</button>
+    </div>
+  </div>`;
+  document.body.appendChild(veil);
+  veil.addEventListener('click', e=>{ if(e.target===veil) veil.remove(); });
+  document.getElementById('nuCancel').addEventListener('click', ()=>veil.remove());
+  document.getElementById('nuCreate').addEventListener('click', async ()=>{
+    const name=document.getElementById('nuName').value.trim();
+    const email=document.getElementById('nuEmail').value.trim();
+    const password=document.getElementById('nuPass').value;
+    const role=document.getElementById('nuRole').value;
+    if(!email || !password){ toast('Заполните email и пароль'); return; }
+    try{
+      await api.createUser({name, email, password, role});
+      veil.remove(); render(); toast('Пользователь создан — сообщите ему логин и пароль лично');
+    }catch(e){
+      toast(e.code==='email_already_in_use' ? 'Этот email уже используется' : 'Не удалось создать: '+e.message, true);
+    }
+  });
+}
+
+function openEditUserModal(user){
+  const veil=document.createElement('div'); veil.className='modal-veil';
+  veil.innerHTML=`<div class="modal">
+    <h2>Изменить пользователя</h2>
+    <label class="flabel">Имя</label>
+    <input class="field" id="euName" value="${esc(user.name||'')}" style="margin-bottom:12px">
+    <label class="flabel">Email</label>
+    <input class="field" id="euEmail" value="${esc(user.email)}" style="margin-bottom:12px">
+    <label class="flabel">Роль</label>
+    <select class="field" id="euRole" style="margin-bottom:12px" ${user.id===currentUser.id?'disabled':''}>
+      <option value="candidate" ${user.role==='candidate'?'selected':''}>Обучающийся</option>
+      <option value="admin" ${user.role==='admin'?'selected':''}>Админ</option>
+    </select>
+    ${user.id===currentUser.id?'<div style="font-size:11px;color:var(--ink3);margin:-8px 0 12px">Свою роль изменить нельзя</div>':''}
+    <label class="flabel">Новый пароль (необязательно)</label>
+    <input class="field" id="euPass" type="text" placeholder="оставьте пустым, если не меняете" style="margin-bottom:14px">
+    <div class="modal-actions">
+      <button class="btn" id="euCancel">Отмена</button>
+      <button class="btn primary" id="euSave">Сохранить</button>
+    </div>
+  </div>`;
+  document.body.appendChild(veil);
+  veil.addEventListener('click', e=>{ if(e.target===veil) veil.remove(); });
+  document.getElementById('euCancel').addEventListener('click', ()=>veil.remove());
+  document.getElementById('euSave').addEventListener('click', async ()=>{
+    const patch = { name: document.getElementById('euName').value.trim(), email: document.getElementById('euEmail').value.trim() };
+    if(user.id!==currentUser.id) patch.role = document.getElementById('euRole').value;
+    const pass = document.getElementById('euPass').value;
+    if(pass) patch.password = pass;
+    try{
+      await api.updateUser(user.id, patch);
+      veil.remove(); render(); toast('Изменения сохранены');
+    }catch(e){
+      toast(e.code==='email_already_in_use' ? 'Этот email уже используется' : 'Не удалось сохранить: '+e.message, true);
+    }
+  });
+}
+
+/* ---------------- self-service profile: change your own login/password ---------------- */
+function openProfileModal(){
+  const veil=document.createElement('div'); veil.className='modal-veil';
+  veil.innerHTML=`<div class="modal">
+    <h2>Профиль</h2>
+    <p class="mhint">Смена вашего email (логина) и/или пароля.</p>
+    <label class="flabel">Имя</label>
+    <input class="field" id="pmName" value="${esc(currentUser.name||'')}" style="margin-bottom:12px">
+    <label class="flabel">Email (логин)</label>
+    <input class="field" id="pmEmail" value="${esc(currentUser.email)}" style="margin-bottom:12px">
+    <label class="flabel">Новый пароль (необязательно)</label>
+    <input class="field" id="pmPass" type="text" placeholder="оставьте пустым, если не меняете" style="margin-bottom:6px">
+    <div style="font-size:11px;color:var(--ink3);margin-bottom:14px">Минимум 6 символов. Текущий пароль не спрашивается — вы уже вошли в систему.</div>
+    <div class="modal-actions">
+      <button class="btn" id="pmCancel">Отмена</button>
+      <button class="btn primary" id="pmSave">Сохранить</button>
+    </div>
+  </div>`;
+  document.body.appendChild(veil);
+  veil.addEventListener('click', e=>{ if(e.target===veil) veil.remove(); });
+  document.getElementById('pmCancel').addEventListener('click', ()=>veil.remove());
+  document.getElementById('pmSave').addEventListener('click', async ()=>{
+    const patch = { name: document.getElementById('pmName').value.trim(), email: document.getElementById('pmEmail').value.trim() };
+    const pass = document.getElementById('pmPass').value;
+    if(pass) patch.password = pass;
+    try{
+      const updated = await api.updateUser(currentUser.id, patch);
+      currentUser = updated;
+      veil.remove(); render(); toast('Профиль обновлён');
+    }catch(e){
+      toast(e.code==='email_already_in_use' ? 'Этот email уже используется' : 'Не удалось сохранить: '+e.message, true);
+    }
+  });
+}
+
+/* ============================================================
    CANDIDATE — HOME
    ============================================================ */
 async function loadAndRenderCandidateHome(){
@@ -1571,6 +1725,40 @@ function bindPage(root, p1){
         if(!confirm('Отозвать ключ? Все запросы с ним начнут получать 401 Unauthorized.')) return;
         try{ await api.revokeKey(b.dataset.revoke); render(); toast('Ключ отозван'); }
         catch(err){ toast('Не удалось отозвать: '+err.message, true); }
+      });
+    });
+  }
+
+  if(root==='users'){
+    const friendlyErr = (e)=>({
+      cannot_deactivate_last_admin: 'Нельзя деактивировать последнего активного админа — сначала создайте или назначьте другого',
+      cannot_delete_last_admin: 'Нельзя удалить последнего админа',
+      cannot_delete_your_own_account: 'Нельзя удалить свою же учётную запись — деактивируйте её с другого админ-аккаунта, если нужно',
+      user_has_attempt_history: 'У этого пользователя уже есть попытки/приглашения — удаление запрещено, чтобы не потерять результаты. Деактивируйте вместо удаления',
+      email_already_in_use: 'Этот email уже используется',
+    }[e.code] || e.message);
+
+    document.getElementById('newUserBtn')?.addEventListener('click', openNewUserModal);
+    document.querySelectorAll('[data-edit-user]').forEach(b=>{
+      b.addEventListener('click', async ()=>{
+        const users = await api.listUsers();
+        const u = users.find(x=>x.id===b.dataset.editUser);
+        if(u) openEditUserModal(u);
+      });
+    });
+    document.querySelectorAll('[data-toggle-user]').forEach(b=>{
+      b.addEventListener('click', async ()=>{
+        const willDeactivate = b.dataset.active==='true';
+        if(willDeactivate && !confirm('Деактивировать пользователя? Он не сможет войти, но история его попыток сохранится.')) return;
+        try{ await api.updateUser(b.dataset.toggleUser, {active: !willDeactivate}); render(); toast(willDeactivate?'Пользователь деактивирован':'Пользователь активирован'); }
+        catch(e){ toast(friendlyErr(e), true); }
+      });
+    });
+    document.querySelectorAll('[data-delete-user]').forEach(b=>{
+      b.addEventListener('click', async ()=>{
+        if(!confirm('Удалить пользователя безвозвратно? Это возможно только если у него нет попыток/приглашений.')) return;
+        try{ await api.deleteUser(b.dataset.deleteUser); render(); toast('Пользователь удалён'); }
+        catch(e){ toast(friendlyErr(e), true); }
       });
     });
   }
