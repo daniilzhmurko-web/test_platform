@@ -96,6 +96,16 @@ label.flabel{display:block;font-size:12px;font-weight:600;color:var(--ink2);marg
 .conn-err code{background:var(--s2);padding:2px 6px;border-radius:4px;font-family:'JetBrains Mono',monospace;font-size:12px}
 
 svg{display:block}
+
+.bell{position:relative;width:34px;height:34px;border-radius:var(--r8);border:1px solid var(--bord);background:var(--surf);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:var(--ink2);flex-shrink:0}
+.bell:hover{border-color:var(--primary);color:var(--primary)}
+.notif-badge{position:absolute;top:-5px;right:-5px;min-width:17px;height:17px;padding:0 4px;border-radius:9999px;background:var(--err);color:#fff;font-size:10px;font-weight:700;display:none;align-items:center;justify-content:center;line-height:1}
+.notif-badge.show{display:inline-flex}
+.notif-badge.inline{position:static;margin-left:auto}
+.notif-item{display:flex;gap:12px;padding:14px 18px;border-bottom:1px solid var(--bord);cursor:pointer;align-items:flex-start}
+.notif-item:hover{background:var(--s2)}
+.notif-item.unread{background:var(--pt)}
+.notif-item.unread:hover{filter:brightness(.98)}
 </style>
 </head>
 <body>
@@ -146,6 +156,62 @@ function toast(msg, isErr){
 let accessToken = null;   // kept in memory only — never in localStorage
 let currentUser = null;
 
+// Org-wide branding/policy, fetched from GET /api/settings (public) before the
+// very first render, so even the pre-login screen reflects it. Falls back to
+// these defaults if the API is unreachable, so a settings outage never blocks login.
+let ORG_SETTINGS = {
+  orgName: 'Агрегатор тестов', primaryColor: '#2563EB',
+  defaultTimeLimitMin: 30, defaultPassScore: 70, minPasswordLength: 6,
+  accessTokenTtlMin: 15, refreshTokenTtlDays: 7,
+};
+
+function hexToRgb(hex){
+  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex||'');
+  return m ? [parseInt(m[1],16), parseInt(m[2],16), parseInt(m[3],16)] : [37,99,235];
+}
+function rgbToHex([r,g,b]){ return '#'+[r,g,b].map(v=>Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,'0')).join(''); }
+// percent > 0 blends toward white (lighter); percent < 0 blends toward black (darker)
+function shadeHex(hex, percent){
+  const [r,g,b] = hexToRgb(hex);
+  const t = percent<0 ? 0 : 255, p = Math.abs(percent);
+  return rgbToHex([r+(t-r)*p, g+(t-g)*p, b+(t-b)*p]);
+}
+function applyBranding(){
+  document.documentElement.style.setProperty('--primary', ORG_SETTINGS.primaryColor);
+  document.documentElement.style.setProperty('--ph', shadeHex(ORG_SETTINGS.primaryColor, -0.15));
+  document.documentElement.style.setProperty('--pt', shadeHex(ORG_SETTINGS.primaryColor, 0.9));
+  document.title = ORG_SETTINGS.orgName + ' — платформа тестирования';
+}
+async function loadOrgSettings(){
+  try{
+    const s = await apiFetch('/settings');
+    ORG_SETTINGS = {...ORG_SETTINGS, ...s};
+  }catch(e){ /* API unreachable at boot — keep defaults, don't block the login screen */ }
+  applyBranding();
+}
+
+/* ---------------- notifications: unread badge + light polling ---------------- */
+let unreadCount = 0, notifTimer = null;
+function updateBadges(){
+  document.querySelectorAll('.notif-badge').forEach(el=>{
+    if(unreadCount>0){ el.textContent = unreadCount>99 ? '99+' : unreadCount; el.classList.add('show'); }
+    else el.classList.remove('show');
+  });
+}
+async function refreshUnread(){
+  if(!currentUser) return;
+  try{ const r = await api.getUnreadCount(); unreadCount = r.unread; updateBadges(); }catch(e){ /* badge is best-effort */ }
+}
+function startNotifPolling(){ if(!notifTimer) notifTimer = setInterval(refreshUnread, 60000); }
+function stopNotifPolling(){ clearInterval(notifTimer); notifTimer = null; unreadCount = 0; }
+function timeAgo(ms){
+  const s = Math.max(0, Math.round((Date.now()-ms)/1000));
+  if(s<60) return 'только что';
+  if(s<3600) return Math.floor(s/60)+' мин назад';
+  if(s<86400) return Math.floor(s/3600)+' ч назад';
+  return new Date(ms).toLocaleDateString('ru-RU',{day:'numeric',month:'short'});
+}
+
 async function rawFetch(path, opts={}){
   const res = await fetch(API_BASE+path, {
     ...opts,
@@ -179,6 +245,27 @@ async function apiFetch(path, opts={}){
   }
   if(res.status===204) return null;
   return res.json();
+}
+
+async function apiFetchBlob(path){
+  let res;
+  try{ res = await rawFetch(path); }
+  catch(networkErr){ throw new ApiError('network', 'Не удалось связаться с API по адресу '+API_BASE); }
+  if(res.status===401){
+    const refreshed = await tryRefresh();
+    if(refreshed) res = await rawFetch(path);
+  }
+  if(!res.ok) throw new ApiError('http_'+res.status, 'Ошибка запроса: '+res.status);
+  const blob = await res.blob();
+  const cd = res.headers.get('content-disposition')||'';
+  const m = cd.match(/filename=([^;]+)/);
+  return {blob, filename: m ? m[1].trim() : 'report'};
+}
+function downloadBlob(blob, filename){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url; a.download=filename; document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 200);
 }
 
 class ApiError extends Error{
@@ -218,7 +305,7 @@ const api = {
 
   listAttempts: (params={})=> apiFetch('/attempts?'+new URLSearchParams(params)),
   getAttempt: (id)=> apiFetch('/attempts/'+id),
-  startAttempt: (testId)=> apiFetch('/attempts', {method:'POST', body:JSON.stringify({testId})}),
+  startAttempt: (testId, consentGiven=false)=> apiFetch('/attempts', {method:'POST', body:JSON.stringify({testId, consentGiven})}),
   patchAttempt: (id,data)=> apiFetch('/attempts/'+id, {method:'PUT', body:JSON.stringify(data)}),
   submitAttempt: (id)=> apiFetch('/attempts/'+id+'/submit', {method:'POST'}),
   getResults: (id)=> apiFetch('/attempts/'+id+'/results'),
@@ -229,6 +316,31 @@ const api = {
   createUser: (data)=> apiFetch('/users', {method:'POST', body:JSON.stringify(data)}),
   updateUser: (id,data)=> apiFetch('/users/'+id, {method:'PUT', body:JSON.stringify(data)}),
   deleteUser: (id)=> apiFetch('/users/'+id, {method:'DELETE'}),
+
+  listCampaigns: (params={})=> apiFetch('/campaigns?'+new URLSearchParams(params)),
+  getCampaign: (id)=> apiFetch('/campaigns/'+id),
+  createCampaign: (data)=> apiFetch('/campaigns', {method:'POST', body:JSON.stringify(data)}),
+  updateCampaign: (id,data)=> apiFetch('/campaigns/'+id, {method:'PUT', body:JSON.stringify(data)}),
+  deleteCampaign: (id)=> apiFetch('/campaigns/'+id, {method:'DELETE'}),
+  bulkInviteCampaign: (id,emails)=> apiFetch('/campaigns/'+id+'/invite', {method:'POST', body:JSON.stringify({emails})}),
+  getCampaignInvitations: (id)=> apiFetch('/campaigns/'+id+'/invitations'),
+
+  getReportsSummary: (params={})=> apiFetch('/reports/summary?'+new URLSearchParams(params)),
+
+  listNotifications: (params={})=> apiFetch('/notifications?'+new URLSearchParams(params)),
+  getUnreadCount: ()=> apiFetch('/notifications/unread-count'),
+  readNotification: (id)=> apiFetch('/notifications/'+id+'/read', {method:'POST'}),
+  readAllNotifications: ()=> apiFetch('/notifications/read-all', {method:'POST'}),
+
+  getSettings: ()=> apiFetch('/settings'),
+  updateSettings: (data)=> apiFetch('/settings', {method:'PUT', body:JSON.stringify(data)}),
+
+  postProctorEvents: (attemptId, events)=> apiFetch('/attempts/'+attemptId+'/proctor-events', {method:'POST', body:JSON.stringify({events})}),
+  postProctorSnapshot: (attemptId, mime, dataBase64)=> apiFetch('/attempts/'+attemptId+'/proctor-snapshot', {method:'POST', body:JSON.stringify({mime,dataBase64})}),
+  getProctorSummary: (attemptId)=> apiFetch('/attempts/'+attemptId+'/proctor-summary'),
+  getProctorEvents: (attemptId)=> apiFetch('/attempts/'+attemptId+'/proctor-events'),
+  postProctorReview: (attemptId, decision, note)=> apiFetch('/attempts/'+attemptId+'/proctor-review', {method:'POST', body:JSON.stringify({decision,note})}),
+  getProctoringOverview: (minScore=0)=> apiFetch('/reports/proctoring?'+new URLSearchParams({minScore})),
 
   listKeys: ()=> apiFetch('/apikeys'),
   createKey: (data)=> apiFetch('/apikeys', {method:'POST', body:JSON.stringify(data)}),
@@ -293,6 +405,116 @@ function allTestQuestionIds(test){ return test.sections.flatMap(s=>s.questionIds
 const bankState = { search:'', skill:'all', difficulty:'all', status:'all', selectedId:null };
 const taking = { attemptId:null, idx:0, timerHandle:null, test:null, questions:null, attempt:null };
 
+/* ---------------- proctoring runtime state (shared between lobby and test-taking) ---------------- */
+const proctorState = {
+  stream:null,       // MediaStream acquired in the lobby, reused in the test-taking page
+  eventQueue:[],      // buffered client events, flushed periodically
+  flushTimer:null, snapshotTimer:null,
+  faceCheckTimer:null, faceDetector:null,
+  listenersBound:false,
+};
+function proctorQueue(type, detail){ proctorState.eventQueue.push({type, detail:detail||{}}); }
+async function proctorFlush(attemptId){
+  if(!proctorState.eventQueue.length) return;
+  const batch = proctorState.eventQueue.splice(0, proctorState.eventQueue.length);
+  try{ await api.postProctorEvents(attemptId, batch); }
+  catch(e){ /* best-effort — a dropped batch of behavior signals shouldn't interrupt the test */ }
+}
+function stopProctoring(){
+  clearInterval(proctorState.flushTimer); clearInterval(proctorState.snapshotTimer); clearInterval(proctorState.faceCheckTimer);
+  proctorState.flushTimer = proctorState.snapshotTimer = proctorState.faceCheckTimer = null;
+  if(proctorState.stream){ proctorState.stream.getTracks().forEach(t=>t.stop()); proctorState.stream=null; }
+}
+
+// Wires up whatever the test's proctoring config asks for. Called exactly once
+// per attempt (guarded by proctorState.listenersBound) — bindPage() re-runs on
+// every render(), which happens on every answer click, so re-binding here
+// would stack duplicate listeners and timers.
+function startProctoringInstrumentation(test, attemptId){
+  const p = test.proctoring;
+  if(!p.enabled || proctorState.listenersBound) return;
+  proctorState.listenersBound = true;
+
+  if(p.behavior){
+    document.addEventListener('visibilitychange', ()=>{
+      proctorQueue(document.hidden ? 'tab_hidden' : 'tab_visible');
+    });
+    window.addEventListener('blur', ()=>proctorQueue('window_blur'));
+    ['copy','cut','paste'].forEach(evt=>document.addEventListener(evt, ()=>proctorQueue(evt)));
+    document.addEventListener('contextmenu', ()=>proctorQueue('context_menu'));
+  }
+
+  if(p.fullscreen){
+    const root = document.documentElement;
+    if(root.requestFullscreen) root.requestFullscreen().catch(()=>{});
+    document.addEventListener('fullscreenchange', ()=>{
+      proctorQueue(document.fullscreenElement ? 'fullscreen_enter' : 'fullscreen_exit');
+    });
+  }
+
+  if(p.camera){
+    setupProctorCamera(p); // async; runs independently, never blocks the test itself
+  }
+
+  proctorState.flushTimer = setInterval(()=>proctorFlush(attemptId), 5000);
+}
+
+async function setupProctorCamera(p){
+  if(!proctorState.stream){
+    // Lobby should have already acquired it; this is the defensive fallback
+    // for a mid-test page reload where the earlier grant was lost.
+    try{ proctorState.stream = await navigator.mediaDevices.getUserMedia({video:{width:320,height:240}, audio:false}); }
+    catch(e){ proctorQueue('camera_denied'); return; }
+  }
+  proctorState.stream.getVideoTracks()[0]?.addEventListener('ended', ()=>proctorQueue('camera_lost'));
+
+  const video = document.createElement('video');
+  video.srcObject = proctorState.stream; video.muted = true; video.playsInline = true;
+  video.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0;pointer-events:none';
+  document.body.appendChild(video);
+  await video.play().catch(()=>{});
+
+  const canvas = document.createElement('canvas');
+  canvas.width = 320; canvas.height = 240;
+  const ctx = canvas.getContext('2d');
+  const grabFrame = ()=>{ ctx.drawImage(video, 0, 0, canvas.width, canvas.height); };
+
+  if(p.snapshots){
+    proctorState.snapshotTimer = setInterval(async ()=>{
+      if(!taking.attemptId) return;
+      grabFrame();
+      canvas.toBlob(async (blob)=>{
+        if(!blob || blob.size > 190*1024) return; // stay under the server's 200KB cap with headroom
+        const b64 = await new Promise(res=>{ const r=new FileReader(); r.onload=()=>res(r.result.split(',')[1]); r.readAsDataURL(blob); });
+        try{ await api.postProctorSnapshot(taking.attemptId, 'image/jpeg', b64); }catch(e){ /* rate-limit or transient — skip this tick */ }
+      }, 'image/jpeg', 0.6);
+    }, p.snapshotIntervalSec*1000);
+  }
+
+  if(p.faceDetection){
+    // Chrome-only experimental Shape Detection API. No fallback ML model is
+    // bundled — on any other browser this degrades to a single honest
+    // "unavailable" notice rather than a fake pass/fail.
+    if('FaceDetector' in window){
+      try{
+        proctorState.faceDetector = new window.FaceDetector({fastMode:true});
+        proctorState.faceCheckTimer = setInterval(async ()=>{
+          if(!proctorState.faceDetector) return;
+          grabFrame();
+          try{
+            const faces = await proctorState.faceDetector.detect(canvas);
+            proctorQueue(faces.length===0 ? 'face_missing' : faces.length>1 ? 'multiple_faces' : 'face_ok');
+          }catch(e){ /* a single failed detection tick isn't worth logging */ }
+        }, 8000);
+      }catch(e){ proctorQueue('face_detection_unavailable'); }
+    } else {
+      proctorQueue('face_detection_unavailable');
+    }
+  }
+}
+
+
+
 function showLoading(){
   document.getElementById('app').innerHTML = `<div class="loading-screen"><div class="spinner"></div><div>Загрузка…</div></div>`;
 }
@@ -329,6 +551,13 @@ async function render(){
     else if(root==='analytics') body = await loadAndRenderAnalytics(p1);
     else if(root==='apikeys') body = await loadAndRenderApiKeys();
     else if(root==='users') body = await loadAndRenderUsers();
+    else if(root==='campaigns' && !p1) body = await loadAndRenderCampaigns();
+    else if(root==='campaigns' && p1) body = await loadAndRenderCampaignDetail(p1);
+    else if(root==='reports') body = await loadAndRenderReports();
+    else if(root==='settings') body = await loadAndRenderSettings();
+    else if(root==='proctoring' && !p1) body = await loadAndRenderProctoringOverview();
+    else if(root==='proctoring' && p1) body = await loadAndRenderProctoringDetail(p1);
+    else if(root==='notifications') body = await loadAndRenderNotifications();
     else if(root==='candidate') body = await loadAndRenderCandidateHome();
     else if(root==='lobby') body = await loadAndRenderLobby(p1);
     else if(root==='test') body = await loadAndRenderTestTaking(p1);
@@ -340,6 +569,7 @@ async function render(){
     else document.getElementById('app').innerHTML = chrome_(body, root);
     bindGlobal();
     bindPage(root, p1, p2);
+    updateBadges(); refreshUnread(); startNotifPolling();
   }catch(e){
     if(e instanceof ApiError && e.code==='network'){ showConnError(e); return; }
     if(e instanceof ApiError && (e.code==='invalid_token'||e.code==='missing_token')){ go('#/auth'); return; }
@@ -351,7 +581,7 @@ async function render(){
 function chrome_(body, root){
   const isAdmin = currentUser.role==='admin';
   const tabs = isAdmin ? [
-    ['tests','Тесты'],['bank','Банк вопросов'],['users','Пользователи'],['apikeys','API-ключи'],
+    ['tests','Тесты'],['bank','Банк вопросов'],['campaigns','Кампании'],['users','Пользователи'],['reports','Отчёты'],['apikeys','API-ключи'],
   ] : [
     ['candidate','Мои тесты'],
   ];
@@ -359,13 +589,14 @@ function chrome_(body, root){
   <div class="topbar">
     <div class="brand" onclick="go('${isAdmin?'#/dashboard':'#/candidate'}')">
       <div class="brand-icon">${ICONS.logo}</div>
-      <div class="brand-name">Агрегатор тестов</div>
+      <div class="brand-name">${esc(ORG_SETTINGS.orgName)}</div>
     </div>
     <div class="sep-v"></div>
     <div class="nav-tabs">
       ${tabs.map(([r,label])=>`<a class="nav-tab ${root===r.split('/')[0]?'active':''}" href="#/${r}">${label}</a>`).join('')}
     </div>
     <div class="sp"></div>
+    <div class="bell" title="Уведомления" onclick="go('#/notifications')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg><span class="notif-badge"></span></div>
     <div class="avatar" title="${esc(currentUser.name)} — профиль" style="cursor:pointer" onclick="openProfileModal()">${esc((currentUser.name||currentUser.email).split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase())}</div>
     <button class="btn sm" id="logoutBtn">Выйти</button>
   </div>
@@ -378,33 +609,33 @@ function dashboardChrome_(body){
     <div style="color:#9CA3AF;font-size:10px;letter-spacing:.8px;margin:18px 10px 6px">${label}</div>
     ${items.map(it=>{
       if(it.soon) return `<a href="#" class="nav-soon" style="display:flex;justify-content:space-between;align-items:center;color:#6B7280;text-decoration:none;padding:10px;border-radius:8px;margin:2px 0;font-weight:500;cursor:not-allowed">${it.label}<span style="font-size:9px;background:rgba(255,255,255,.08);padding:2px 6px;border-radius:9999px">скоро</span></a>`;
-      return `<a href="${it.href}" style="display:block;color:#D1D5DB;text-decoration:none;padding:10px;border-radius:8px;margin:2px 0;font-weight:500;${it.active?'background:#2563EB;color:#fff':''}">${it.label}</a>`;
+      return `<a href="${it.href}" style="display:flex;align-items:center;color:#D1D5DB;text-decoration:none;padding:10px;border-radius:8px;margin:2px 0;font-weight:500;${it.active?'background:var(--primary);color:#fff':''}">${it.label}${it.badge?'<span class="notif-badge inline"></span>':''}</a>`;
     }).join('')}`;
 
   return `
   <div style="min-height:100vh;display:flex;background:var(--bg)">
     <aside style="width:224px;flex-shrink:0;background:#111827;color:#fff;padding:20px 12px;position:relative">
-      <div style="font-size:18px;font-weight:700;padding:4px 10px 24px">Агрегатор тестов</div>
+      <div style="font-size:18px;font-weight:700;padding:4px 10px 24px">${esc(ORG_SETTINGS.orgName)}</div>
       <div style="background:rgba(255,255,255,.08);padding:10px;border-radius:8px;font-size:12px;margin-bottom:8px;cursor:pointer" onclick="openProfileModal()" title="Изменить email/пароль">
         <b style="display:block;font-size:13px;margin-bottom:3px">${esc(currentUser.name)}</b>${esc(currentUser.email)}
       </div>
       ${navSection('ОБЗОР', [
         {label:'Главный дашборд', href:'#/dashboard', active:true},
-        {label:'Уведомления', soon:true},
+        {label:'Уведомления', href:'#/notifications', badge:true},
       ])}
       ${navSection('УПРАВЛЕНИЕ', [
         {label:'Тесты', href:'#/tests'},
         {label:'Банк вопросов', href:'#/bank'},
-        {label:'Кампании', soon:true},
+        {label:'Кампании', href:'#/campaigns'},
         {label:'Пользователи', href:'#/users'},
       ])}
       ${navSection('АНАЛИТИКА', [
-        {label:'Отчёты', soon:true},
-        {label:'Прокторинг', soon:true},
+        {label:'Отчёты', href:'#/reports'},
+        {label:'Прокторинг', href:'#/proctoring'},
       ])}
       ${navSection('ОРГАНИЗАЦИЯ', [
         {label:'API-ключи', href:'#/apikeys'},
-        {label:'Настройки', soon:true},
+        {label:'Настройки', href:'#/settings'},
       ])}
       <div style="margin-top:20px;padding-top:14px;border-top:1px solid rgba(255,255,255,.13);padding-left:10px">
         <button class="btn sm" id="logoutBtn" style="background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.15);color:#D1D5DB">Выйти</button>
@@ -415,6 +646,7 @@ function dashboardChrome_(body){
         <h2 style="font-size:15px;margin:0;font-weight:600">Рабочая область</h2>
         <div class="sp"></div>
         <input class="field" id="dashSearch" placeholder="Поиск тестов, обучающихся, вопросов" style="width:250px;height:33px">
+        <div class="bell" title="Уведомления" onclick="go('#/notifications')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg><span class="notif-badge"></span></div>
         <button class="btn sm" id="helpBtn">Справка</button>
         <div class="avatar" title="${esc(currentUser.name)} — профиль" style="cursor:pointer" onclick="openProfileModal()">${esc((currentUser.name||currentUser.email).split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase())}</div>
       </header>
@@ -426,6 +658,7 @@ function dashboardChrome_(body){
 function bindGlobal(){
   document.getElementById('logoutBtn')?.addEventListener('click', async ()=>{
     try{ await api.logout(); }catch(e){}
+    stopNotifPolling();
     accessToken=null; currentUser=null; CACHE.questions=null; CACHE.tests=null;
     go('#/auth');
   });
@@ -444,7 +677,7 @@ function viewAuth(){
       <div style="position:absolute;bottom:-110px;left:-60px;width:320px;height:320px;border-radius:50%;background:rgba(124,58,237,.25)"></div>
       <div style="display:flex;align-items:center;gap:10px;position:relative;z-index:2">
         <div style="width:38px;height:38px;border-radius:8px;background:rgba(255,255,255,.2);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center">${ICONS.logo}</div>
-        <span style="font-size:19px;font-weight:700;letter-spacing:-.3px">Агрегатор тестов</span>
+        <span style="font-size:19px;font-weight:700;letter-spacing:-.3px">${esc(ORG_SETTINGS.orgName)}</span>
       </div>
       <div style="position:relative;z-index:2">
         <h1 style="font-size:32px;font-weight:700;line-height:1.25;letter-spacing:-.5px;margin:0 0 14px">Тестирование —<br><span style="color:rgba(255,255,255,.7)">это возможность.</span></h1>
@@ -591,25 +824,23 @@ async function loadAndRenderDashboardHome(){
   const reviewQuestions = CACHE.questions.filter(q=>q.status==='review').length;
   const activeTests = tests.filter(t=>t.status==='published').length;
 
-  // "Кампании" — this platform doesn't model campaigns as a separate entity from
-  // tests, so each test's own invite/attempt data is shown in that shape instead.
-  const campaignRows = tests.map(t=>{
-    const invites = allInvitations.filter(i=>i.testId===t.id);
-    const tAttempts = allAttempts.filter(a=>a.testId===t.id);
-    const tSubmitted = tAttempts.filter(a=>a.status==='submitted');
-    const passed = tSubmitted.filter(a=>scorePctLocal(a,t)>=t.passScore).length;
-    const denom = invites.length || tAttempts.length || 1;
-    const pct = Math.min(100, Math.round(tSubmitted.length/denom*100));
-    const statusMap = {published:['АКТИВЕН','#ECFDF5','#065F46'], draft:['ЧЕРНОВИК','#F3F4F6','#374151'], review:['НА ПРОВЕРКЕ','#FFFBEB','#92400E']};
-    const [label,bg,fg] = statusMap[t.status]||statusMap.draft;
-    const passRate = tSubmitted.length? Math.round(passed/tSubmitted.length*100)+'%' : '—';
-    return `<div style="display:grid;grid-template-columns:1.3fr 90px 90px 90px;gap:10px;align-items:center;padding:12px 0;border-bottom:1px solid var(--bord);cursor:pointer" onclick="go('#/analytics/${t.id}')">
-      <div><b style="font-size:13px">${esc(t.title)}</b>
-        <div style="font-size:11px;color:var(--ink2);margin-top:4px">${allTestQuestionIds(t).length} вопросов · лимит ${t.timeLimitMin} мин</div>
+  // Real campaigns now exist as their own entity — show them directly instead
+  // of using tests as a stand-in.
+  const campaignsList = await api.listCampaigns();
+  const campaignRows = campaignsList.slice(0,5).map(c=>{
+    const t = tests.find(x=>x.id===c.testId);
+    const pct = c.stats.invited? Math.min(100, Math.round(c.stats.submitted/c.stats.invited*100)) : 0;
+    const [label,tagClass] = STATUS_META[c.status]||STATUS_META.draft;
+    const bg = {draft:'#F3F4F6',active:'#ECFDF5',completed:'#EFF6FF',archived:'#FEF2F2'}[c.status];
+    const fg = {draft:'#374151',active:'#065F46',completed:'#1D4ED8',archived:'#991B1B'}[c.status];
+    const passRate = c.stats.submitted? Math.round(c.stats.passed/c.stats.submitted*100)+'%' : '—';
+    return `<div style="display:grid;grid-template-columns:1.3fr 90px 90px 90px;gap:10px;align-items:center;padding:12px 0;border-bottom:1px solid var(--bord);cursor:pointer" onclick="go('#/campaigns/${c.id}')">
+      <div><b style="font-size:13px">${esc(c.title)}</b>
+        <div style="font-size:11px;color:var(--ink2);margin-top:4px">${esc(t?.title||c.testId)}</div>
         <div style="height:7px;background:var(--s2);border-radius:5px;overflow:hidden;margin-top:6px"><i style="display:block;height:100%;width:${pct}%;background:var(--primary);border-radius:5px"></i></div>
       </div>
       <span style="padding:4px 7px;border-radius:9999px;font-size:10px;font-weight:700;background:${bg};color:${fg};justify-self:start">${label}</span>
-      <div><b style="font-size:13px">${tSubmitted.length} / ${invites.length||tAttempts.length}</b><div style="font-size:11px;color:var(--ink2)">завершили</div></div>
+      <div><b style="font-size:13px">${c.stats.submitted} / ${c.stats.invited}</b><div style="font-size:11px;color:var(--ink2)">завершили</div></div>
       <div><b style="font-size:13px">${passRate}</b><div style="font-size:11px;color:var(--ink2)">прошли</div></div>
     </div>`;
   }).join('');
@@ -660,8 +891,8 @@ async function loadAndRenderDashboardHome(){
 
   <section style="display:grid;grid-template-columns:1.2fr .8fr;gap:16px">
     <div class="card" style="padding:18px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><b style="font-size:14px">Тесты и попытки</b><a href="#/tests" style="color:var(--primary);font-size:12px;font-weight:600;text-decoration:none">Все тесты →</a></div>
-      ${campaignRows || '<div class="empty">Пока нет тестов</div>'}
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><b style="font-size:14px">Кампании</b><a href="#/campaigns" style="color:var(--primary);font-size:12px;font-weight:600;text-decoration:none">Все кампании →</a></div>
+      ${campaignRows || '<div class="empty"><b>Пока нет кампаний</b>Создайте кампанию, чтобы пригласить группу обучающихся на тест</div>'}
     </div>
     <div class="card" style="padding:18px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><b style="font-size:14px">Требует внимания</b></div>
@@ -946,6 +1177,25 @@ async function loadAndRenderBuilder(testId){
     <div class="card" style="padding:12px"><span style="font-size:11px;color:var(--ink2)">Сумма баллов</span><b style="display:block;font-size:18px;margin-top:4px">${totalPts}</b></div>
     <div class="card" style="padding:12px"><span style="font-size:11px;color:var(--ink2)">Лимит времени</span><b style="display:block;font-size:18px;margin-top:4px" contenteditable="true" id="timeLimitEdit">${test.timeLimitMin} мин</b></div>
     <div class="card" style="padding:12px"><span style="font-size:11px;color:var(--ink2)">Проходной балл</span><b style="display:block;font-size:18px;margin-top:4px" contenteditable="true" id="passScoreEdit">${test.passScore}%</b></div>
+  </div>
+
+  <div class="card" style="padding:18px;margin-bottom:18px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+      <b style="font-size:14px">Прокторинг</b>
+      <label style="display:flex;align-items:center;gap:6px;margin-left:auto;cursor:pointer;font-size:12px;font-weight:600">
+        <input type="checkbox" id="pcEnabled" ${test.proctoring.enabled?'checked':''}> Включён
+      </label>
+    </div>
+    <p style="font-size:11px;color:var(--ink3);margin:0 0 12px">Сигналы для проверки человеком, не автоматический вердикт. Камера и распознавание лиц требуют явного согласия обучающегося перед стартом.</p>
+    <div id="pcOptions" style="display:${test.proctoring.enabled?'grid':'none'};grid-template-columns:1fr 1fr;gap:10px 20px">
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="pcBehavior" ${test.proctoring.behavior?'checked':''}> Поведение (смена вкладки, копирование, вставка)</label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="pcFullscreen" ${test.proctoring.fullscreen?'checked':''}> Требовать полноэкранный режим</label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="pcCamera" ${test.proctoring.camera?'checked':''}> Веб-камера (обязательное согласие)</label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;${test.proctoring.camera?'':'opacity:.4;pointer-events:none'}"><input type="checkbox" id="pcSnapshots" ${test.proctoring.snapshots?'checked':''}> Периодические снимки</label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;${test.proctoring.camera?'':'opacity:.4;pointer-events:none'}"><input type="checkbox" id="pcFaceDetection" ${test.proctoring.faceDetection?'checked':''}> Распознавание лица (если браузер поддерживает)</label>
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;${test.proctoring.camera?'':'opacity:.4;pointer-events:none'}">Снимок каждые <input class="field" id="pcInterval" type="number" min="30" max="300" value="${test.proctoring.snapshotIntervalSec}" style="width:70px"> сек</div>
+    </div>
+    <div style="margin-top:14px"><button class="btn primary sm" id="saveProctoringBtn">Сохранить настройки прокторинга</button></div>
   </div>
 
   ${sections}
@@ -1254,6 +1504,450 @@ function openProfileModal(){
 }
 
 /* ============================================================
+   ADMIN — CAMPAIGNS (real entity: scheduled invite wave against one test)
+   ============================================================ */
+const STATUS_META = {
+  draft: ['Черновик','tag-grey'], active: ['Активна','tag-green'],
+  completed: ['Завершена','tag-blue'], archived: ['Архив','tag-red'],
+};
+
+async function loadAndRenderCampaigns(){
+  const [campaigns, tests] = await Promise.all([api.listCampaigns(), ensureTests()]);
+  const testTitle = id => (tests.find(t=>t.id===id)||{}).title || id;
+
+  const rows = campaigns.map(c=>{
+    const [label,tagClass] = STATUS_META[c.status]||STATUS_META.draft;
+    const pct = c.stats.invited? Math.round(c.stats.submitted/c.stats.invited*100) : 0;
+    return `<div class="card" style="padding:18px;margin-bottom:12px;cursor:pointer" onclick="go('#/campaigns/${c.id}')">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+        <div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+            <b style="font-size:15px">${esc(c.title)}</b><span class="tag ${tagClass}">${label}</span>
+          </div>
+          <div style="font-size:12px;color:var(--ink2)">${esc(testTitle(c.testId))}${c.startDate?` · ${c.startDate}${c.endDate?' — '+c.endDate:''}`:''}</div>
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <b style="font-size:18px">${c.stats.submitted} / ${c.stats.invited}</b>
+          <div style="font-size:11px;color:var(--ink2)">завершили · ${c.stats.passed} прошли</div>
+        </div>
+      </div>
+      <div style="height:7px;background:var(--s2);border-radius:5px;overflow:hidden;margin-top:12px"><i style="display:block;height:100%;width:${pct}%;background:var(--primary);border-radius:5px"></i></div>
+    </div>`;
+  }).join('');
+
+  return `
+  <div class="pagehead">
+    <div><h1>Кампании</h1><p>Волны приглашений на тест — с расписанием и своей когортой обучающихся.</p></div>
+    <button class="btn primary" id="newCampaignBtn">${ICONS.plus} Создать кампанию</button>
+  </div>
+  ${rows || '<div class="empty"><b>Пока нет кампаний</b>Создайте первую, чтобы пригласить группу обучающихся на тест</div>'}`;
+}
+
+function openNewCampaignModal(){
+  const veil=document.createElement('div'); veil.className='modal-veil';
+  const testOptions = CACHE.tests.map(t=>`<option value="${t.id}">${esc(t.title)}</option>`).join('');
+  veil.innerHTML=`<div class="modal">
+    <h2>Новая кампания</h2>
+    <label class="flabel">Тест</label>
+    <select class="field" id="ncTest" style="margin-bottom:12px">${testOptions}</select>
+    <label class="flabel">Название кампании</label>
+    <input class="field" id="ncTitle" placeholder="Frontend hiring — октябрь" style="margin-bottom:12px">
+    <label class="flabel">Описание (необязательно)</label>
+    <textarea class="field" id="ncDesc" rows="2" style="margin-bottom:12px"></textarea>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+      <div><label class="flabel">Начало</label><input class="field" id="ncStart" type="date"></div>
+      <div><label class="flabel">Окончание</label><input class="field" id="ncEnd" type="date"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" id="ncCancel">Отмена</button>
+      <button class="btn primary" id="ncCreate">Создать</button>
+    </div>
+  </div>`;
+  document.body.appendChild(veil);
+  veil.addEventListener('click', e=>{ if(e.target===veil) veil.remove(); });
+  document.getElementById('ncCancel').addEventListener('click', ()=>veil.remove());
+  document.getElementById('ncCreate').addEventListener('click', async ()=>{
+    const title = document.getElementById('ncTitle').value.trim();
+    if(!title){ toast('Введите название кампании'); return; }
+    try{
+      const c = await api.createCampaign({
+        testId: document.getElementById('ncTest').value, title,
+        description: document.getElementById('ncDesc').value.trim(),
+        startDate: document.getElementById('ncStart').value || null,
+        endDate: document.getElementById('ncEnd').value || null,
+      });
+      veil.remove(); go('#/campaigns/'+c.id);
+    }catch(e){ toast('Не удалось создать кампанию: '+e.message, true); }
+  });
+}
+
+async function loadAndRenderCampaignDetail(id){
+  const [c, invites, tests] = await Promise.all([api.getCampaign(id), api.getCampaignInvitations(id), ensureTests()]);
+  const test = tests.find(t=>t.id===c.testId);
+  const [label,tagClass] = STATUS_META[c.status]||STATUS_META.draft;
+
+  const inviteRows = invites.map(i=>{
+    const statusTag = i.attemptStatus==='submitted' ? '<span class="tag tag-green">Завершил</span>'
+      : i.attemptStatus==='in_progress' ? '<span class="tag tag-amber">Проходит</span>'
+      : '<span class="tag tag-grey">Не начал</span>';
+    return `<tr style="border-bottom:1px solid var(--bord)">
+      <td style="padding:11px 10px"><b>${esc(i.userName||i.userEmail)}</b><div style="font-size:11px;color:var(--ink3)">${esc(i.userEmail)}</div></td>
+      <td style="padding:11px 10px">${statusTag}</td>
+      <td style="padding:11px 10px">${i.attemptId? `<a href="#/results/${i.attemptId}" style="color:var(--primary);font-size:12px;font-weight:600">Результаты →</a>` : '—'}</td>
+    </tr>`;
+  }).join('');
+
+  return `
+  <div class="pagehead">
+    <div>
+      <div style="display:flex;align-items:center;gap:8px;color:var(--ink2);font-size:12px;margin-bottom:6px">Кампании / <b style="color:var(--ink)">${esc(c.title)}</b></div>
+      <div style="display:flex;align-items:center;gap:10px"><h1 style="margin:0">${esc(c.title)}</h1><span class="tag ${tagClass}">${label}</span></div>
+      <p style="margin:4px 0 0">${esc(test?.title||c.testId)}${c.startDate?` · ${c.startDate}${c.endDate?' — '+c.endDate:''}`:''}</p>
+    </div>
+    <div style="display:flex;gap:8px">
+      ${c.status==='draft'? `<button class="btn primary" id="activateBtn">Запустить</button>` : ''}
+      ${c.status==='active'? `<button class="btn" id="completeBtn">Завершить</button>` : ''}
+      ${c.status!=='archived'? `<button class="btn" id="archiveBtn">Архивировать</button>` : ''}
+      <button class="btn danger" id="deleteCampaignBtn">Удалить</button>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px">
+    <div class="card" style="padding:14px"><small style="color:var(--ink2)">Приглашено</small><b style="display:block;font-size:22px;margin-top:5px">${c.stats.invited}</b></div>
+    <div class="card" style="padding:14px"><small style="color:var(--ink2)">Завершили</small><b style="display:block;font-size:22px;margin-top:5px">${c.stats.submitted}</b></div>
+    <div class="card" style="padding:14px"><small style="color:var(--ink2)">Прошли порог</small><b style="display:block;font-size:22px;margin-top:5px">${c.stats.passed}</b></div>
+  </div>
+
+  <div class="card" style="padding:18px;margin-bottom:16px">
+    <b style="font-size:13px">Пригласить обучающихся</b>
+    <p style="font-size:12px;color:var(--ink2);margin:4px 0 10px">Email через запятую или с новой строки. Приглашать можно только уже существующих пользователей с ролью «Обучающийся» — сначала создайте их на странице «Пользователи», если их ещё нет.</p>
+    <textarea class="field" id="inviteEmails" rows="3" placeholder="student@testpotok.ru, another@testpotok.ru" style="margin-bottom:10px"></textarea>
+    <button class="btn primary" id="bulkInviteBtn">Пригласить</button>
+  </div>
+
+  <div class="card" style="overflow:auto">
+    <table style="width:100%;border-collapse:collapse">
+      <thead><tr style="border-bottom:1px solid var(--bord)">
+        <th style="text-align:left;padding:9px 10px;color:var(--ink3);font-size:10px;text-transform:uppercase">Обучающийся</th>
+        <th style="text-align:left;padding:9px 10px;color:var(--ink3);font-size:10px;text-transform:uppercase">Статус</th>
+        <th style="text-align:left;padding:9px 10px;color:var(--ink3);font-size:10px;text-transform:uppercase"></th>
+      </tr></thead>
+      <tbody>${inviteRows || `<tr><td colspan="3" class="empty">Пока никто не приглашён</td></tr>`}</tbody>
+    </table>
+  </div>
+  <input type="hidden" id="campaignDetailId" value="${c.id}">`;
+}
+
+/* ============================================================
+   ADMIN — REPORTS (org-wide summary + CSV/PDF exports)
+   ============================================================ */
+const reportsState = { from:'', to:'' };
+
+async function loadAndRenderReports(){
+  const params = {};
+  if(reportsState.from) params.from = reportsState.from;
+  if(reportsState.to) params.to = reportsState.to;
+  const r = await api.getReportsSummary(params);
+
+  const testRows = r.perTest.map(t=>`
+    <tr style="border-bottom:1px solid var(--bord)">
+      <td style="padding:10px"><b style="cursor:pointer;color:var(--primary)" onclick="go('#/analytics/${t.testId}')">${esc(t.title)}</b></td>
+      <td style="padding:10px">${t.invited}</td>
+      <td style="padding:10px">${t.submitted}</td>
+      <td style="padding:10px">${t.avgScore}%</td>
+      <td style="padding:10px"><b style="color:${t.passRate>=70?'var(--ok)':t.passRate>=40?'var(--warn)':'var(--err)'}">${t.passRate}%</b></td>
+    </tr>`).join('');
+
+  const skillRows = r.perSkill.map(s=>{
+    const color = s.avgCorrectRate>=70?'var(--ok)':s.avgCorrectRate>=45?'var(--warn)':'var(--err)';
+    return `<div style="display:flex;align-items:center;gap:12px;padding:8px 0">
+      <span style="width:110px;font-size:12px;flex-shrink:0">${esc(s.skill)}</span>
+      <div style="flex:1;height:8px;background:var(--s2);border-radius:4px;overflow:hidden"><div style="height:100%;width:${s.avgCorrectRate}%;background:${color};border-radius:4px"></div></div>
+      <b style="width:40px;text-align:right;font-size:12px">${s.avgCorrectRate}%</b>
+      <span style="width:70px;text-align:right;font-size:11px;color:var(--ink3)">${s.questionCount} вопр.</span>
+    </div>`;
+  }).join('');
+
+  const issueRows = r.questionIssues.map(q=>`
+    <div style="padding:9px 0;border-bottom:1px solid var(--bord);display:flex;justify-content:space-between;gap:10px;cursor:pointer" onclick="go('#/bank')">
+      <div style="font-size:12px"><span class="tag tag-blue" style="margin-right:6px">${esc(q.skill)}</span>${esc(q.text.slice(0,70))}${q.text.length>70?'…':''}</div>
+      <b style="font-size:12px;color:var(--err);flex-shrink:0">${q.discrimination.toFixed(2)}</b>
+    </div>`).join('');
+
+  return `
+  <div class="pagehead">
+    <div><h1>Отчёты</h1><p>Сформировано: ${new Date(r.generatedAt).toLocaleString('ru-RU')}</p></div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <input class="field" type="date" id="repFrom" value="${reportsState.from}" style="width:150px">
+      <span style="color:var(--ink3)">—</span>
+      <input class="field" type="date" id="repTo" value="${reportsState.to}" style="width:150px">
+      <button class="btn sm" id="repApply">Применить</button>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px">
+    <div class="card" style="padding:14px"><small style="color:var(--ink2)">Тесты</small><b style="display:block;font-size:22px;margin-top:5px">${r.totals.tests}</b></div>
+    <div class="card" style="padding:14px"><small style="color:var(--ink2)">Кампании</small><b style="display:block;font-size:22px;margin-top:5px">${r.totals.campaigns}</b></div>
+    <div class="card" style="padding:14px"><small style="color:var(--ink2)">Попытки (завершено)</small><b style="display:block;font-size:22px;margin-top:5px">${r.totals.submitted} / ${r.totals.attempts}</b></div>
+    <div class="card" style="padding:14px"><small style="color:var(--ink2)">Общая проходимость</small><b style="display:block;font-size:22px;margin-top:5px">${r.totals.overallPassRate}%</b></div>
+  </div>
+
+  <div style="display:flex;gap:8px;margin-bottom:16px">
+    <button class="btn" id="dlAttemptsCsv">⬇ Попытки — CSV</button>
+    <button class="btn" id="dlQuestionsCsv">⬇ Вопросы — CSV</button>
+    <button class="btn primary" id="dlSummaryPdf">⬇ Сводка — PDF</button>
+  </div>
+
+  <div class="card" style="overflow:auto;margin-bottom:16px">
+    <table style="width:100%;border-collapse:collapse">
+      <thead><tr style="border-bottom:1px solid var(--bord)">
+        <th style="text-align:left;padding:9px 10px;color:var(--ink3);font-size:10px;text-transform:uppercase">Тест</th>
+        <th style="text-align:left;padding:9px 10px;color:var(--ink3);font-size:10px;text-transform:uppercase">Приглашено</th>
+        <th style="text-align:left;padding:9px 10px;color:var(--ink3);font-size:10px;text-transform:uppercase">Завершили</th>
+        <th style="text-align:left;padding:9px 10px;color:var(--ink3);font-size:10px;text-transform:uppercase">Ср. балл</th>
+        <th style="text-align:left;padding:9px 10px;color:var(--ink3);font-size:10px;text-transform:uppercase">Прошли</th>
+      </tr></thead>
+      <tbody>${testRows || `<tr><td colspan="5" class="empty">Нет данных за период</td></tr>`}</tbody>
+    </table>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <div class="card" style="padding:18px">
+      <b style="font-size:14px">Успеваемость по навыкам</b>
+      <div style="margin-top:12px">${skillRows || '<div class="empty">Нет данных</div>'}</div>
+    </div>
+    <div class="card" style="padding:18px">
+      <b style="font-size:14px">Вопросы с низкой дискриминацией</b>
+      <p style="font-size:11px;color:var(--ink3);margin:2px 0 8px">Дискриминация &lt; 0.20 — вопрос плохо отличает сильных от слабых, стоит пересмотреть</p>
+      <div>${issueRows || '<div class="empty">Таких вопросов не найдено</div>'}</div>
+    </div>
+  </div>`;
+}
+
+/* ============================================================
+   ADMIN — SETTINGS (org branding + new-test defaults + password/session policy)
+   ============================================================ */
+async function loadAndRenderSettings(){
+  const s = await api.getSettings();
+  return `
+  <div class="pagehead">
+    <div><h1>Настройки</h1><p>Бренд, значения по умолчанию для новых тестов, требования к паролю и время жизни сессии.</p></div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:900px">
+    <div class="card" style="padding:20px">
+      <b style="font-size:14px">Бренд организации</b>
+      <p style="font-size:11px;color:var(--ink3);margin:4px 0 14px">Название и акцентный цвет применяются сразу везде — в том числе на экране входа, до авторизации.</p>
+      <label class="flabel">Название организации</label>
+      <input class="field" id="stOrgName" value="${esc(s.orgName)}" maxlength="60" style="margin-bottom:14px">
+      <label class="flabel">Акцентный цвет</label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input type="color" id="stColorPicker" value="${esc(s.primaryColor)}" style="width:44px;height:38px;padding:2px;border:1px solid var(--bord);border-radius:8px;cursor:pointer">
+        <input class="field" id="stColorHex" value="${esc(s.primaryColor)}" style="flex:1;font-family:'JetBrains Mono',monospace">
+      </div>
+    </div>
+
+    <div class="card" style="padding:20px">
+      <b style="font-size:14px">Новые тесты по умолчанию</b>
+      <p style="font-size:11px;color:var(--ink3);margin:4px 0 14px">Применяется при нажатии «+ Новый тест» — можно изменить в конструкторе для конкретного теста.</p>
+      <label class="flabel">Лимит времени (минут)</label>
+      <input class="field" id="stTimeLimit" type="number" min="1" max="300" value="${s.defaultTimeLimitMin}" style="margin-bottom:14px">
+      <label class="flabel">Проходной балл (%)</label>
+      <input class="field" id="stPassScore" type="number" min="0" max="100" value="${s.defaultPassScore}">
+    </div>
+
+    <div class="card" style="padding:20px">
+      <b style="font-size:14px">Требования к паролю</b>
+      <p style="font-size:11px;color:var(--ink3);margin:4px 0 14px">Действует при создании пользователя и смене пароля — своего или чужого.</p>
+      <label class="flabel">Минимальная длина пароля</label>
+      <input class="field" id="stMinPass" type="number" min="4" max="64" value="${s.minPasswordLength}">
+    </div>
+
+    <div class="card" style="padding:20px">
+      <b style="font-size:14px">Время жизни сессии</b>
+      <p style="font-size:11px;color:var(--ink3);margin:4px 0 14px">Короче access-токен — чаще идёт тихое обновление в фоне, но безопаснее при краже токена.</p>
+      <label class="flabel">Access-токен (минут)</label>
+      <input class="field" id="stAccessTtl" type="number" min="1" max="1440" value="${s.accessTokenTtlMin}" style="margin-bottom:14px">
+      <label class="flabel">Refresh-сессия (дней)</label>
+      <input class="field" id="stRefreshTtl" type="number" min="1" max="90" value="${s.refreshTokenTtlDays}">
+    </div>
+  </div>
+
+  <div style="max-width:900px;margin-top:16px;display:flex;justify-content:flex-end">
+    <button class="btn primary" id="saveSettingsBtn">Сохранить настройки</button>
+  </div>`;
+}
+
+/* ============================================================
+   ADMIN — PROCTORING (org-wide risk overview + per-attempt review)
+   ============================================================ */
+const RISK_META = { low:['Низкий','tag-grey'], medium:['Средний','tag-amber'], high:['Высокий','tag-red'] };
+
+async function loadAndRenderProctoringOverview(){
+  const rows = await api.getProctoringOverview(0);
+  const list = rows.map(r=>{
+    const [label,cls] = RISK_META[r.level]||RISK_META.low;
+    const reviewTag = r.review
+      ? (r.review.decision==='flagged' ? '<span class="tag tag-red">Помечено</span>' : '<span class="tag tag-green">Проверено</span>')
+      : '<span class="tag tag-grey">Не проверено</span>';
+    return `<tr style="border-bottom:1px solid var(--bord);cursor:pointer" onclick="go('#/proctoring/${r.attemptId}')">
+      <td style="padding:11px 10px"><b>${esc(r.userName)}</b><div style="font-size:11px;color:var(--ink3)">${esc(r.userEmail)}</div></td>
+      <td style="padding:11px 10px">${esc(r.testTitle)}</td>
+      <td style="padding:11px 10px"><span class="tag ${cls}">${label} · ${r.score}</span></td>
+      <td style="padding:11px 10px">${r.flagged} событий${r.snapshots?` · ${r.snapshots} снимков`:''}</td>
+      <td style="padding:11px 10px">${reviewTag}</td>
+    </tr>`;
+  }).join('');
+
+  return `
+  <div class="pagehead">
+    <div><h1>Прокторинг</h1><p>Попытки с зафиксированными событиями, по убыванию риска. Оценка риска — сигнал для проверки человеком, не готовое обвинение.</p></div>
+  </div>
+  <div class="card" style="overflow:auto">
+    <table style="width:100%;border-collapse:collapse">
+      <thead><tr style="border-bottom:1px solid var(--bord)">
+        <th style="text-align:left;padding:9px 10px;color:var(--ink3);font-size:10px;text-transform:uppercase">Обучающийся</th>
+        <th style="text-align:left;padding:9px 10px;color:var(--ink3);font-size:10px;text-transform:uppercase">Тест</th>
+        <th style="text-align:left;padding:9px 10px;color:var(--ink3);font-size:10px;text-transform:uppercase">Риск</th>
+        <th style="text-align:left;padding:9px 10px;color:var(--ink3);font-size:10px;text-transform:uppercase">События</th>
+        <th style="text-align:left;padding:9px 10px;color:var(--ink3);font-size:10px;text-transform:uppercase">Разбор</th>
+      </tr></thead>
+      <tbody>${list || `<tr><td colspan="5" class="empty"><b>Пока нет данных</b>Появятся попытки на тестах с включённым прокторингом</td></tr>`}</tbody>
+    </table>
+  </div>`;
+}
+
+const PROCTOR_EVENT_LABELS = {
+  tab_hidden:'Переключение вкладки/окна', window_blur:'Потеря фокуса окна', fullscreen_exit:'Выход из полноэкранного режима',
+  copy:'Копирование', cut:'Вырезание', paste:'Вставка', context_menu:'Правый клик',
+  face_missing:'Лицо не обнаружено', multiple_faces:'Несколько лиц в кадре',
+  camera_lost:'Камера отключилась', camera_denied:'Доступ к камере не дан',
+  consent_given:'Согласие получено', proctor_started:'Сессия прокторинга начата',
+  tab_visible:'Вернулся во вкладку', fullscreen_enter:'Вход в полноэкранный режим',
+  face_ok:'Лицо в кадре', face_detection_unavailable:'Распознавание лиц недоступно в этом браузере',
+  snapshot:'Снимок с камеры',
+};
+
+async function loadAndRenderProctoringDetail(attemptId){
+  const [summary, events] = await Promise.all([api.getProctorSummary(attemptId), api.getProctorEvents(attemptId)]);
+  const [label,cls] = RISK_META[summary.level]||RISK_META.low;
+
+  const rows = events.map(e=>{
+    const isSnapshot = e.type==='snapshot';
+    const weighted = e.severity>0;
+    return `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--bord)">
+      <span style="font-size:11px;color:var(--ink3);width:70px;flex-shrink:0">${new Date(e.createdAt).toLocaleTimeString('ru-RU')}</span>
+      <span style="font-size:13px;flex:1">${PROCTOR_EVENT_LABELS[e.type]||e.type}</span>
+      ${weighted?`<span class="tag tag-amber">+${e.severity}</span>`:''}
+      ${isSnapshot?`<img src="" data-snapshot-id="${e.id}" style="width:52px;height:38px;object-fit:cover;border-radius:6px;border:1px solid var(--bord);cursor:pointer" onclick="openSnapshotViewer('${e.id}')">`:''}
+    </div>`;
+  }).join('');
+
+  return `
+  <div class="pagehead">
+    <div>
+      <div style="color:var(--ink2);font-size:12px;margin-bottom:6px"><a href="#/proctoring" style="color:inherit;text-decoration:none">Прокторинг</a> / Разбор попытки</div>
+      <h1>Журнал прокторинга</h1>
+    </div>
+    <span class="tag ${cls}" style="font-size:13px;padding:6px 12px">Риск: ${label} (${summary.score})</span>
+  </div>
+
+  <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px">
+    <div class="card" style="padding:0;overflow:hidden">
+      <div style="padding:14px 18px;border-bottom:1px solid var(--bord);font-weight:700;font-size:13px">Хронология событий</div>
+      <div style="padding:4px 18px;max-height:520px;overflow:auto">${rows || '<div class="empty">Событий не зафиксировано</div>'}</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div class="card" style="padding:18px">
+        <b style="font-size:13px">Решение по попытке</b>
+        <p style="font-size:11px;color:var(--ink3);margin:4px 0 12px">Финальную оценку всегда принимает человек — журнал только показывает сигналы.</p>
+        ${summary.review ? `<div style="padding:10px;background:var(--s2);border-radius:8px;font-size:12px;margin-bottom:10px">
+          <b>${summary.review.decision==='flagged'?'Помечено как нарушение':'Проверено, нарушений нет'}</b>
+          ${summary.review.note?`<div style="margin-top:4px;color:var(--ink2)">${esc(summary.review.note)}</div>`:''}
+          <div style="margin-top:6px;color:var(--ink3);font-size:11px">${esc(summary.review.reviewerName)} · ${new Date(summary.review.at).toLocaleString('ru-RU')}</div>
+        </div>` : ''}
+        <textarea class="field" id="reviewNote" rows="2" placeholder="Комментарий (необязательно)" style="margin-bottom:10px"></textarea>
+        <div style="display:flex;gap:8px">
+          <button class="btn" id="clearReviewBtn" style="flex:1;justify-content:center">Проверено — ок</button>
+          <button class="btn danger" id="flagReviewBtn" style="flex:1;justify-content:center">Пометить нарушение</button>
+        </div>
+      </div>
+      <div class="card" style="padding:18px">
+        <b style="font-size:13px">Сводка</b>
+        <div style="margin-top:10px;display:flex;flex-direction:column;gap:8px;font-size:12px">
+          <div style="display:flex;justify-content:space-between"><span style="color:var(--ink2)">Событий с весом</span><b>${summary.flagged}</b></div>
+          <div style="display:flex;justify-content:space-between"><span style="color:var(--ink2)">Снимков</span><b>${summary.snapshots}</b></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="snapshotViewerRoot"></div>
+  <input type="hidden" id="proctorAttemptId" value="${attemptId}">`;
+}
+
+async function openSnapshotViewer(eventId){
+  try{
+    const {blob} = await apiFetchBlob('/proctor-events/'+eventId+'/snapshot');
+    const url = URL.createObjectURL(blob);
+    const veil = document.createElement('div'); veil.className='modal-veil';
+    veil.innerHTML = `<div class="modal" style="max-width:420px;text-align:center">
+      <img src="${url}" style="max-width:100%;border-radius:10px">
+      <div class="modal-actions" style="justify-content:center"><button class="btn" id="snapClose">Закрыть</button></div>
+    </div>`;
+    document.body.appendChild(veil);
+    veil.addEventListener('click', e=>{ if(e.target===veil){ URL.revokeObjectURL(url); veil.remove(); } });
+    document.getElementById('snapClose').addEventListener('click', ()=>{ URL.revokeObjectURL(url); veil.remove(); });
+  }catch(e){ toast('Не удалось загрузить снимок: '+e.message, true); }
+}
+
+// Thumbnails in the timeline load lazily and lock the endpoint behind admin auth,
+// so they're fetched as authenticated blobs rather than plain <img src>.
+async function hydrateSnapshotThumbnails(){
+  for(const img of document.querySelectorAll('img[data-snapshot-id]')){
+    try{
+      const {blob} = await apiFetchBlob('/proctor-events/'+img.dataset.snapshotId+'/snapshot');
+      img.src = URL.createObjectURL(blob);
+    }catch(e){ img.style.display='none'; }
+  }
+}
+
+/* ============================================================
+   NOTIFICATIONS (both roles — each user sees only their own inbox)
+   ============================================================ */
+const NOTIF_META = {
+  attempt_submitted: ['✅','#ECFDF5'], invited: ['✉️','#EFF6FF'],
+  deadline: ['⏰','#FFFBEB'], campaign_ended: ['⚠️','#FEF2F2'],
+};
+
+async function loadAndRenderNotifications(){
+  const r = await api.listNotifications();
+  unreadCount = r.unread;
+  const rows = r.items.map(n=>{
+    const [icon,bg] = NOTIF_META[n.type] || ['🔔','#F3F4F6'];
+    return `<div class="notif-item ${n.read?'':'unread'}" data-nid="${n.id}" data-link="${esc(n.link)}" data-read="${n.read}">
+      <div style="width:36px;height:36px;border-radius:50%;background:${bg};display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px">${icon}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;${n.read?'font-weight:500':'font-weight:700'}">${esc(n.title)}</div>
+        ${n.body?`<div style="font-size:12px;color:var(--ink2);margin-top:3px">${esc(n.body)}</div>`:''}
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
+        <span style="font-size:11px;color:var(--ink3)">${timeAgo(n.createdAt)}</span>
+        ${n.read?'':'<i style="width:8px;height:8px;border-radius:50%;background:var(--primary)"></i>'}
+      </div>
+    </div>`;
+  }).join('');
+
+  return `
+  <div class="pagehead">
+    <div><h1>Уведомления</h1><p>${r.unread ? `Непрочитанных: ${r.unread}` : 'Все прочитано'}</p></div>
+    <button class="btn" id="readAllBtn" ${r.unread?'':'disabled'}>Отметить все прочитанными</button>
+  </div>
+  <div class="card" style="overflow:hidden">
+    ${rows || '<div class="empty"><b>Пока пусто</b>Здесь появятся события: новые попытки, приглашения, приближающиеся сроки</div>'}
+  </div>`;
+}
+
+/* ============================================================
    CANDIDATE — HOME
    ============================================================ */
 async function loadAndRenderCandidateHome(){
@@ -1290,6 +1984,7 @@ async function loadAndRenderCandidateHome(){
    ============================================================ */
 async function loadAndRenderLobby(testId){
   const test = await api.getTest(testId);
+  const p = test.proctoring;
   return `
   <div style="display:grid;grid-template-columns:1.7fr 1fr;gap:24px;align-items:start;max-width:1100px;margin:0 auto">
     <div style="display:flex;flex-direction:column;gap:16px">
@@ -1310,12 +2005,33 @@ async function loadAndRenderLobby(testId){
           <div style="font-size:13px;line-height:1.55">${esc(t)}</div>
         </div>`).join('')}
       </div>
+      ${p.enabled ? `<div class="card" style="padding:22px;border-color:var(--warn-b);background:#FFFDF7">
+        <div style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:#92400E;margin-bottom:10px">${ICONS.flag} Этот тест проходит с прокторингом</div>
+        <div style="display:flex;flex-direction:column;gap:8px;font-size:12px;color:#78350F">
+          ${p.behavior?'<div>• Отслеживается переключение вкладок, копирование и вставка текста</div>':''}
+          ${p.fullscreen?'<div>• Тест нужно проходить в полноэкранном режиме</div>':''}
+          ${p.camera?'<div>• Требуется веб-камера'+(p.snapshots?' — периодические снимки':'')+(p.faceDetection?', проверка наличия лица в кадре':'')+'</div>':''}
+        </div>
+      </div>`:''}
     </div>
     <div style="display:flex;flex-direction:column;gap:16px">
       <div class="card" style="padding:18px">
         <div style="font-size:12px;font-weight:600;color:var(--ink3);text-transform:uppercase;margin-bottom:12px">Проверка системы</div>
         <div id="checkList" style="display:flex;flex-direction:column;gap:8px"></div>
       </div>
+      ${p.camera ? `<div class="card" style="padding:18px">
+        <div style="font-size:12px;font-weight:600;color:var(--ink3);text-transform:uppercase;margin-bottom:12px">Камера</div>
+        <div style="background:#111827;border-radius:10px;aspect-ratio:16/10;display:flex;align-items:center;justify-content:center;overflow:hidden;margin-bottom:10px">
+          <video id="camPreview" autoplay muted playsinline style="width:100%;height:100%;object-fit:cover;display:none"></video>
+          <span id="camPlaceholder" style="color:#6B7280;font-size:12px">Камера не включена</span>
+        </div>
+        <button class="btn" id="enableCamBtn" style="width:100%;justify-content:center;margin-bottom:10px">Включить камеру</button>
+        <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer">
+          <input type="checkbox" id="camConsentBox" disabled style="margin-top:3px">
+          <span style="font-size:12px;line-height:1.5">Я согласен(на) на видеофиксацию во время прохождения теста</span>
+        </label>
+        <div id="camStatus" style="font-size:11px;color:var(--ink3);margin-top:6px"></div>
+      </div>` : ''}
       <div class="card" style="padding:18px">
         <label style="display:flex;gap:10px;align-items:flex-start;margin-bottom:14px;cursor:pointer">
           <input type="checkbox" id="agreeBox" style="margin-top:3px">
@@ -1383,7 +2099,7 @@ async function loadAndRenderTestTaking(attemptId){
   return `
   <div style="height:100vh;display:flex;flex-direction:column;background:#F0F4F8">
     <div class="topbar" style="border-bottom:1px solid var(--bord)">
-      <div class="brand"><div class="brand-icon">${ICONS.logo}</div><div class="brand-name">Агрегатор тестов</div></div>
+      <div class="brand"><div class="brand-icon">${ICONS.logo}</div><div class="brand-name">${esc(ORG_SETTINGS.orgName)}</div></div>
       <div class="sep-v"></div>
       <div style="font-size:13px;color:var(--ink2)"><b style="color:var(--ink)">${esc(test.title)}</b></div>
       <div class="sp"></div>
@@ -1467,6 +2183,9 @@ async function saveAttemptPatch(patch){
 async function submitTest(attemptId, auto){
   if(!auto && !confirm('Завершить тест? После этого изменить ответы будет нельзя.')) return;
   clearInterval(taking.timerHandle);
+  await proctorFlush(attemptId);  // last best-effort flush before the attempt locks
+  stopProctoring();
+  proctorState.listenersBound = false; // reset so a different attempt can re-instrument later
   try{
     await api.submitAttempt(attemptId);
   }catch(e){
@@ -1533,7 +2252,7 @@ async function loadAndRenderResults(attemptId){
         <span class="tag ${r.passed?'tag-green':'tag-red'}" style="margin-bottom:14px">${r.passed?'✓ Тест пройден':'✕ Порог не набран'}</span>
         <div style="font-size:28px;font-weight:700;letter-spacing:-.5px;margin:10px 0 6px">${esc(test.title)}</div>
         <div style="color:var(--ink2);margin-bottom:20px">Завершено ${attempt.endTime? new Date(attempt.endTime).toLocaleString('ru-RU'):''}</div>
-        <button class="btn primary" onclick="go('#/candidate')">К списку тестов</button>
+        <button class="btn primary" onclick="go('${currentUser.role==='admin'?'#/dashboard':'#/candidate'}')">${currentUser.role==='admin'?'На дашборд':'К списку тестов'}</button>
         <button class="btn" onclick="window.print()">Скачать отчёт</button>
       </div>
       <div class="card" style="padding:24px;display:flex;gap:24px;align-items:center">
@@ -1590,7 +2309,7 @@ function bindPage(root, p1){
   if(root==='tests'){
     document.getElementById('newTestBtn')?.addEventListener('click', async ()=>{
       try{
-        const t = await api.createTest({title:'Новый тест', timeLimitMin:30, passScore:70, instructions:['Добавьте инструкции для обучающегося.']});
+        const t = await api.createTest({title:'Новый тест', instructions:['Добавьте инструкции для обучающегося.']}); // no timeLimitMin/passScore — backend applies org defaults from Settings
         invalidateTests(); go('#/builder/'+t.id);
       }catch(e){ toast('Не удалось создать тест: '+e.message, true); }
     });
@@ -1611,7 +2330,7 @@ function bindPage(root, p1){
   if(root==='dashboard'){
     document.getElementById('newTestBtn')?.addEventListener('click', async ()=>{
       try{
-        const t = await api.createTest({title:'Новый тест', timeLimitMin:30, passScore:70, instructions:['Добавьте инструкции для обучающегося.']});
+        const t = await api.createTest({title:'Новый тест', instructions:['Добавьте инструкции для обучающегося.']}); // no timeLimitMin/passScore — backend applies org defaults from Settings
         invalidateTests(); go('#/builder/'+t.id);
       }catch(e){ toast('Не удалось создать тест: '+e.message, true); }
     });
@@ -1658,6 +2377,33 @@ function bindPage(root, p1){
 
   if(root==='builder'){
     const testId = document.getElementById('builderTestId')?.value;
+
+    const pcEnabled = document.getElementById('pcEnabled'), pcCamera = document.getElementById('pcCamera');
+    const syncProctoringUI = ()=>{
+      document.getElementById('pcOptions').style.display = pcEnabled.checked ? 'grid' : 'none';
+      document.querySelectorAll('#pcSnapshots, #pcFaceDetection, #pcInterval').forEach(el=>{
+        const wrap = el.closest('label') || el.closest('div');
+        wrap.style.opacity = pcCamera.checked ? '1' : '.4';
+        wrap.style.pointerEvents = pcCamera.checked ? 'auto' : 'none';
+      });
+    };
+    pcEnabled?.addEventListener('change', syncProctoringUI);
+    pcCamera?.addEventListener('change', syncProctoringUI);
+    document.getElementById('saveProctoringBtn')?.addEventListener('click', async (e)=>{
+      const proctoring = {
+        enabled: document.getElementById('pcEnabled').checked,
+        behavior: document.getElementById('pcBehavior').checked,
+        fullscreen: document.getElementById('pcFullscreen').checked,
+        camera: document.getElementById('pcCamera').checked,
+        snapshots: document.getElementById('pcSnapshots').checked,
+        faceDetection: document.getElementById('pcFaceDetection').checked,
+        snapshotIntervalSec: parseInt(document.getElementById('pcInterval').value) || 45,
+      };
+      e.target.disabled = true;
+      try{ await api.updateTest(testId, {proctoring}); invalidateTests(); render(); toast('Настройки прокторинга сохранены'); }
+      catch(err){ toast('Не удалось сохранить: '+err.message, true); e.target.disabled=false; }
+    });
+
     document.getElementById('publishBtn')?.addEventListener('click', async (e)=>{
       try{ const t = await api.publishTest(e.target.dataset.id); invalidateTests(); render(); toast(t.status==='published'?'Тест опубликован':'Тест снят с публикации'); }
       catch(err){ toast('Не удалось изменить публикацию: '+err.message, true); }
@@ -1763,11 +2509,129 @@ function bindPage(root, p1){
     });
   }
 
+  if(root==='campaigns' && !p1){
+    document.getElementById('newCampaignBtn')?.addEventListener('click', openNewCampaignModal);
+  }
+
+  if(root==='campaigns' && p1){
+    const cid = document.getElementById('campaignDetailId')?.value || p1;
+    document.getElementById('activateBtn')?.addEventListener('click', async ()=>{
+      try{ await api.updateCampaign(cid, {status:'active'}); render(); toast('Кампания запущена'); }
+      catch(e){ toast('Не удалось запустить: '+e.message, true); }
+    });
+    document.getElementById('completeBtn')?.addEventListener('click', async ()=>{
+      try{ await api.updateCampaign(cid, {status:'completed'}); render(); toast('Кампания завершена'); }
+      catch(e){ toast('Не удалось завершить: '+e.message, true); }
+    });
+    document.getElementById('archiveBtn')?.addEventListener('click', async ()=>{
+      if(!confirm('Архивировать кампанию? Приглашённые обучающиеся сохранят доступ к своим результатам.')) return;
+      try{ await api.updateCampaign(cid, {status:'archived'}); render(); toast('Кампания заархивирована'); }
+      catch(e){ toast('Не удалось архивировать: '+e.message, true); }
+    });
+    document.getElementById('deleteCampaignBtn')?.addEventListener('click', async ()=>{
+      if(!confirm('Удалить кампанию? Приглашения будут удалены, но результаты обучающихся останутся.')) return;
+      try{ await api.deleteCampaign(cid); go('#/campaigns'); toast('Кампания удалена'); }
+      catch(e){ toast('Не удалось удалить: '+e.message, true); }
+    });
+    document.getElementById('bulkInviteBtn')?.addEventListener('click', async (e)=>{
+      const raw = document.getElementById('inviteEmails').value.trim();
+      if(!raw){ toast('Введите хотя бы один email'); return; }
+      e.target.disabled = true;
+      try{
+        const result = await api.bulkInviteCampaign(cid, raw);
+        render();
+        const parts = [];
+        if(result.invited.length) parts.push(`приглашено: ${result.invited.length}`);
+        if(result.alreadyInvited.length) parts.push(`уже были приглашены: ${result.alreadyInvited.length}`);
+        if(result.notFound.length) parts.push(`не найдены как обучающиеся: ${result.notFound.join(', ')}`);
+        toast(parts.join(' · ') || 'Готово');
+      }catch(err){ toast('Не удалось пригласить: '+err.message, true); e.target.disabled=false; }
+    });
+  }
+
+  if(root==='reports'){
+    document.getElementById('repApply')?.addEventListener('click', ()=>{
+      reportsState.from = document.getElementById('repFrom').value;
+      reportsState.to = document.getElementById('repTo').value;
+      render();
+    });
+    const doDownload = async (btn, path, fallbackName)=>{
+      const original = btn.textContent; btn.disabled = true; btn.textContent = 'Формирование…';
+      try{
+        const qs = new URLSearchParams();
+        if(reportsState.from) qs.set('from', reportsState.from);
+        if(reportsState.to) qs.set('to', reportsState.to);
+        const {blob, filename} = await apiFetchBlob(path + (qs.toString()?'?'+qs.toString():''));
+        downloadBlob(blob, filename||fallbackName);
+      }catch(e){ toast('Не удалось скачать отчёт: '+e.message, true); }
+      finally{ btn.disabled=false; btn.textContent=original; }
+    };
+    document.getElementById('dlAttemptsCsv')?.addEventListener('click', (e)=>doDownload(e.target,'/reports/attempts.csv','attempts_report.csv'));
+    document.getElementById('dlQuestionsCsv')?.addEventListener('click', (e)=>doDownload(e.target,'/reports/questions.csv','questions_report.csv'));
+    document.getElementById('dlSummaryPdf')?.addEventListener('click', (e)=>doDownload(e.target,'/reports/summary.pdf','summary_report.pdf'));
+  }
+
+  if(root==='notifications'){
+    document.querySelectorAll('.notif-item').forEach(el=>{
+      el.addEventListener('click', async ()=>{
+        if(el.dataset.read==='false'){
+          try{ await api.readNotification(el.dataset.nid); }catch(e){ /* still navigate */ }
+        }
+        if(el.dataset.link) go(el.dataset.link); else render();
+      });
+    });
+    document.getElementById('readAllBtn')?.addEventListener('click', async ()=>{
+      try{ await api.readAllNotifications(); render(); }
+      catch(e){ toast('Не удалось обновить: '+e.message, true); }
+    });
+  }
+
+  if(root==='settings'){
+    const picker = document.getElementById('stColorPicker'), hex = document.getElementById('stColorHex');
+    picker?.addEventListener('input', ()=>{ hex.value = picker.value; });
+    hex?.addEventListener('input', ()=>{ if(/^#[0-9A-Fa-f]{6}$/.test(hex.value)) picker.value = hex.value; });
+
+    document.getElementById('saveSettingsBtn')?.addEventListener('click', async (e)=>{
+      const colorVal = hex.value.trim();
+      if(!/^#[0-9A-Fa-f]{6}$/.test(colorVal)){ toast('Цвет должен быть в формате #RRGGBB'); return; }
+      const patch = {
+        orgName: document.getElementById('stOrgName').value.trim(),
+        primaryColor: colorVal,
+        defaultTimeLimitMin: parseInt(document.getElementById('stTimeLimit').value),
+        defaultPassScore: parseInt(document.getElementById('stPassScore').value),
+        minPasswordLength: parseInt(document.getElementById('stMinPass').value),
+        accessTokenTtlMin: parseInt(document.getElementById('stAccessTtl').value),
+        refreshTokenTtlDays: parseInt(document.getElementById('stRefreshTtl').value),
+      };
+      if(!patch.orgName){ toast('Название организации не может быть пустым'); return; }
+      e.target.disabled = true;
+      try{
+        const updated = await api.updateSettings(patch);
+        ORG_SETTINGS = {...ORG_SETTINGS, ...updated};
+        applyBranding();
+        toast('Настройки сохранены');
+        render();
+      }catch(err){
+        toast('Не удалось сохранить: '+err.message, true);
+      }finally{ e.target.disabled = false; }
+    });
+  }
+
+  if(root==='proctoring' && p1){
+    hydrateSnapshotThumbnails();
+    const doReview = async (decision)=>{
+      try{
+        await api.postProctorReview(p1, decision, document.getElementById('reviewNote').value.trim());
+        render(); toast(decision==='flagged' ? 'Помечено как нарушение' : 'Отмечено как проверенное');
+      }catch(e){ toast('Не удалось сохранить решение: '+e.message, true); }
+    };
+    document.getElementById('clearReviewBtn')?.addEventListener('click', ()=>doReview('cleared'));
+    document.getElementById('flagReviewBtn')?.addEventListener('click', ()=>doReview('flagged'));
+  }
+
   if(root==='lobby'){
     const checks = [
       {label:'Интернет-соединение', sub:'Проверка скорости соединения'},
-      {label:'Веб-камера', sub:'Проверка доступа к камере'},
-      {label:'Микрофон', sub:'Проверка уровня звука'},
       {label:'Браузер', sub:'Проверка совместимости'},
     ];
     const list = document.getElementById('checkList');
@@ -1781,12 +2645,39 @@ function bindPage(root, p1){
         const s=row.querySelector('.stat'); s.textContent='Готово'; s.style.color='var(--ok)'; s.style.fontWeight='600';
       }, 500+i*350);
     });
+
     const agree=document.getElementById('agreeBox'), startBtn=document.getElementById('startTestBtn');
-    agree.addEventListener('change', ()=>{ startBtn.disabled=!agree.checked; });
+    const camConsentBox = document.getElementById('camConsentBox'); // null if this test doesn't require a camera
+    const updateStartEnabled = ()=>{
+      startBtn.disabled = !agree.checked || (!!camConsentBox && !camConsentBox.checked);
+    };
+    agree.addEventListener('change', updateStartEnabled);
+
+    document.getElementById('enableCamBtn')?.addEventListener('click', async (e)=>{
+      const btn=e.target, statusEl=document.getElementById('camStatus');
+      btn.disabled=true; btn.textContent='Запрашиваем доступ…';
+      try{
+        const stream = await navigator.mediaDevices.getUserMedia({video:{width:320,height:240}, audio:false});
+        proctorState.stream = stream;
+        const video = document.getElementById('camPreview');
+        video.srcObject = stream; video.style.display='block';
+        document.getElementById('camPlaceholder').style.display='none';
+        camConsentBox.disabled = false;
+        statusEl.textContent = 'Камера подключена.'; statusEl.style.color='var(--ok)';
+        btn.textContent='Камера включена'; 
+        camConsentBox.addEventListener('change', updateStartEnabled);
+      }catch(err){
+        statusEl.textContent = 'Не удалось получить доступ к камере — проверьте разрешения браузера.';
+        statusEl.style.color='var(--err)';
+        btn.disabled=false; btn.textContent='Повторить';
+      }
+    });
+
     startBtn.addEventListener('click', async ()=>{
       startBtn.disabled=true; startBtn.textContent='Запуск…';
       try{
-        const attempt = await api.startAttempt(p1);
+        const consentGiven = !!camConsentBox && camConsentBox.checked;
+        const attempt = await api.startAttempt(p1, consentGiven);
         taking.idx=0;
         go('#/test/'+attempt.id);
       }catch(e){
@@ -1803,6 +2694,8 @@ function bindPage(root, p1){
     const qids = allTestQuestionIds(test);
     const qid = qids[taking.idx];
     const q = qMap[qid];
+
+    startProctoringInstrumentation(test, p1);
 
     document.getElementById('submitTestBtn')?.addEventListener('click', ()=>submitTest(p1,false));
     document.getElementById('prevQBtn')?.addEventListener('click', ()=>{ taking.idx=Math.max(0,taking.idx-1); render(); });
@@ -1979,7 +2872,7 @@ function openNewQuestionModal(){
 }
 
 /* ---------------- boot ---------------- */
-render();
+(async ()=>{ await loadOrgSettings(); render(); })();
 </script>
 </body>
 </html>
