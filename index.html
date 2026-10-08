@@ -1154,6 +1154,14 @@ async function loadAndRenderBuilder(testId){
           <option value="">+ Добавить вопрос из банка…</option>
           ${CACHE.questions.filter(q=>!sec.questionIds.includes(q.id)).map(q=>`<option value="${q.id}">${q.id} — ${esc(q.text.slice(0,50))}</option>`).join('')}
         </select>
+        <select class="field addSkillSelect" data-sec="${sec.id}" style="max-width:340px;margin-left:8px">
+          <option value="">+ Добавить все вопросы навыка…</option>
+          ${[...new Set(CACHE.questions.map(q=>q.skill))].sort().map(sk=>{
+            const n=CACHE.questions.filter(q=>q.skill===sk && !test.sections.some(x=>x.questionIds.includes(q.id))).length;
+            return n? `<option value="${esc(sk)}">${esc(sk)} (${n})</option>` : '';
+          }).join('')}
+          <option value="__all__">★ Все вопросы банка, ещё не в тесте</option>
+        </select>
       </div>
     </article>`;
   }).join('');
@@ -2426,6 +2434,19 @@ function bindPage(root, p1){
         sec.questionIds.push(qid);
         try{ await api.updateTest(test.id, {sections:test.sections}); invalidateTests(); render(); toast('Вопрос добавлен'); }
         catch(err){ toast('Не удалось добавить вопрос: '+err.message, true); }
+      });
+    });
+    document.querySelectorAll('.addSkillSelect').forEach(sel=>{
+      sel.addEventListener('change', async e=>{
+        const skill=e.target.value; if(!skill) return;
+        const test = await api.getTest(testId);
+        const sec = test.sections.find(s=>s.id===e.target.dataset.sec);
+        const used = new Set(test.sections.flatMap(s=>s.questionIds));
+        const ids = CACHE.questions.filter(q=>(skill==='__all__'||q.skill===skill) && !used.has(q.id)).map(q=>q.id);
+        if(!ids.length) return;
+        sec.questionIds.push(...ids);
+        try{ await api.updateTest(test.id, {sections:test.sections}); invalidateTests(); render(); toast('Добавлено вопросов: '+ids.length); }
+        catch(err){ toast('Не удалось добавить вопросы: '+err.message, true); }
       });
     });
     document.querySelectorAll('[data-remove-q]').forEach(b=>{
