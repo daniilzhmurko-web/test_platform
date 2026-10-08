@@ -1038,7 +1038,7 @@ async function loadAndRenderBank(){
       <td style="padding:12px 10px"><div style="font-weight:600">${esc(q.text)} ${q.media&&q.media.length?'🖼️':''}</div><div style="color:var(--ink3);font-size:11px;margin-top:3px">${q.id}</div></td>
       <td style="padding:12px 10px"><span class="tag tag-blue">${q.skill}</span> <span class="tag tag-grey">${q.difficulty}</span></td>
       <td style="padding:12px 10px"><span class="tag ${statusTag(q.status)}">${statusLabel(q.status)}</span></td>
-      <td style="padding:12px 10px">${q.stats?('<b style="color:'+(q.stats.discrimination>=0.25?'var(--ok)':'var(--err)')+'">'+q.stats.discrimination.toFixed(2)+'</b>'):'—'}</td>
+      <td style="padding:12px 10px">${(q.stats&&q.stats.attempts>0)?('<b style="color:'+(q.stats.discrimination>=0.25?'var(--ok)':'var(--err)')+'">'+q.stats.discrimination.toFixed(2)+'</b>'):'<span title="Нет данных: ещё не было прохождений" style="color:var(--ink3)">—</span>'}</td>
     </tr>`).join('');
 
   return `
@@ -1077,7 +1077,7 @@ async function loadAndRenderBank(){
             <th style="text-align:left;padding:9px 10px;color:var(--ink3);font-size:10px;text-transform:uppercase">Вопрос</th>
             <th style="text-align:left;padding:9px 10px;color:var(--ink3);font-size:10px;text-transform:uppercase">Навык</th>
             <th style="text-align:left;padding:9px 10px;color:var(--ink3);font-size:10px;text-transform:uppercase">Статус</th>
-            <th style="text-align:left;padding:9px 10px;color:var(--ink3);font-size:10px;text-transform:uppercase">Дискр.</th>
+            <th title="Дискриминация: насколько вопрос отличает сильных от слабых (−1…1). Считается по результатам прохождений; пока попыток нет — «—». Норма: от 0.25." style="text-align:left;padding:9px 10px;color:var(--ink3);font-size:10px;text-transform:uppercase;cursor:help">Дискр. ⓘ</th>
           </tr></thead>
           <tbody>${rows || `<tr><td colspan="4" class="empty">Ничего не найдено</td></tr>`}</tbody>
         </table>
@@ -1112,6 +1112,16 @@ function questionInspector(q){
       <div style="background:var(--s2);border-radius:8px;padding:10px"><small style="color:var(--ink2)">Среднее время</small><strong style="display:block;font-size:16px;margin-top:3px">${q.stats.avgTime||'—'}</strong></div>
       <div style="background:var(--s2);border-radius:8px;padding:10px"><small style="color:var(--ink2)">Попыток</small><strong style="display:block;font-size:16px;margin-top:3px">${q.stats.attempts||0}</strong></div>
     </div></div>`:''}
+  <div style="border-top:1px solid var(--bord);margin-top:16px;padding-top:14px">
+    <b style="font-size:12px">Редактирование</b>
+    <label class="flabel" style="margin-top:10px">Сложность</label>
+    <select class="field" id="editDiff" data-id="${q.id}">${['Базовый','Средний','Продвинутый'].map(d=>`<option ${q.difficulty===d?'selected':''}>${d}</option>`).join('')}</select>
+    <label class="flabel" style="margin-top:10px">Статус</label>
+    <select class="field" id="editStatus" data-id="${q.id}">${[['draft','Черновик'],['review','На проверке'],['approved','Одобрен'],['stale','Устарел']].map(([v,l])=>`<option value="${v}" ${q.status===v?'selected':''}>${l}</option>`).join('')}</select>
+    <label class="flabel" style="margin-top:10px">Баллы</label>
+    <input class="field" type="number" min="0" id="editPoints" data-id="${q.id}" value="${q.points}">
+    <button class="btn sm primary" id="saveEditBtn" data-id="${q.id}" style="margin-top:12px">Сохранить изменения</button>
+  </div>
   <div style="display:flex;gap:8px;margin-top:16px">
     <button class="btn sm danger" id="deleteQBtn" data-id="${q.id}">${ICONS.trash} Удалить</button>
   </div>`;
@@ -2354,6 +2364,16 @@ function bindPage(root, p1){
     document.getElementById('fStatus')?.addEventListener('change', e=>{ bankState.status=e.target.value; render(); });
     document.querySelectorAll('.bankRow').forEach(r=>r.addEventListener('click', ()=>{ bankState.selectedId=r.dataset.id; render(); }));
     document.getElementById('newQBtn')?.addEventListener('click', openNewQuestionModal);
+    document.getElementById('saveEditBtn')?.addEventListener('click', async (e)=>{
+      const id=e.target.dataset.id;
+      const data={
+        difficulty: document.getElementById('editDiff').value,
+        status: document.getElementById('editStatus').value,
+        points: Math.max(0, parseInt(document.getElementById('editPoints').value,10)||0),
+      };
+      try{ await api.updateQuestion(id, data); invalidateQuestions(); render(); toast('Вопрос обновлён'); }
+      catch(err){ toast('Не удалось сохранить: '+err.message, true); }
+    });
     document.getElementById('deleteQBtn')?.addEventListener('click', async (e)=>{
       if(!confirm('Удалить вопрос из банка? Это не затронет уже опубликованные тесты.')) return;
       try{ await api.deleteQuestion(e.target.closest('button').dataset.id); invalidateQuestions(); bankState.selectedId=null; render(); toast('Вопрос удалён'); }
