@@ -236,6 +236,12 @@ async function apiFetch(path, opts={}){
     const refreshed = await tryRefresh();
     if(refreshed){
       res = await rawFetch(path, opts);
+    } else {
+      accessToken=null; currentUser=null;
+      try{ toast('Сессия истекла — войдите снова', true); }catch(e){}
+      document.querySelectorAll('.modal-veil').forEach(v=>v.remove());
+      go('#/auth');
+      throw new ApiError('session_expired','Сессия истекла. Войдите снова.');
     }
   }
   if(!res.ok){
@@ -322,7 +328,7 @@ const api = {
   createCampaign: (data)=> apiFetch('/campaigns', {method:'POST', body:JSON.stringify(data)}),
   updateCampaign: (id,data)=> apiFetch('/campaigns/'+id, {method:'PUT', body:JSON.stringify(data)}),
   deleteCampaign: (id)=> apiFetch('/campaigns/'+id, {method:'DELETE'}),
-  bulkInviteCampaign: (id,emails)=> apiFetch('/campaigns/'+id+'/invite', {method:'POST', body:JSON.stringify({emails})}),
+  bulkInviteCampaign: (id,emails,groups)=> apiFetch('/campaigns/'+id+'/invite', {method:'POST', body:JSON.stringify({emails:emails||'',groups:groups||''})}),
   getCampaignInvitations: (id)=> apiFetch('/campaigns/'+id+'/invitations'),
 
   getReportsSummary: (params={})=> apiFetch('/reports/summary?'+new URLSearchParams(params)),
@@ -1366,14 +1372,19 @@ function openNewKeyModal(){
 /* ============================================================
    ADMIN — USERS (create learner/admin logins, edit, deactivate, delete)
    ============================================================ */
+let usersGroupFilter='';
+let knownGroups=[];
 async function loadAndRenderUsers(){
-  const users = await api.listUsers();
+  const allUsers = await api.listUsers();
+  knownGroups=[...new Set(allUsers.map(u=>u.group).filter(Boolean))].sort();
+  const users = usersGroupFilter ? allUsers.filter(u=>(usersGroupFilter==='__none__'?!u.group:u.group===usersGroupFilter)) : allUsers;
   const roleLabel = r=>r==='admin'?'Админ':'Обучающийся';
   const rows = users.map(u=>`
     <tr style="border-bottom:1px solid var(--bord);${u.active===false?'opacity:.5':''}">
       <td style="padding:12px 10px"><b>${esc(u.name||'—')}</b>${u.id===currentUser.id?' <span class="tag tag-blue">это вы</span>':''}</td>
       <td style="padding:12px 10px">${esc(u.email)}</td>
       <td style="padding:12px 10px"><span class="tag ${u.role==='admin'?'tag-violet':'tag-blue'}">${roleLabel(u.role)}</span></td>
+      <td style="padding:12px 10px">${u.group?`<span class="tag tag-blue">${esc(u.group)}</span>`:'<span style="color:var(--ink3)">—</span>'}</td>
       <td style="padding:12px 10px">${u.active===false?'<span class="tag tag-red">Деактивирован</span>':'<span class="tag tag-green">Активен</span>'}</td>
       <td style="padding:12px 10px;text-align:right;white-space:nowrap">
         <button class="btn sm" data-edit-user="${u.id}">Изменить</button>
@@ -1384,19 +1395,25 @@ async function loadAndRenderUsers(){
 
   return `
   <div class="pagehead">
-    <div><h1>Пользователи</h1><p>Логины для обучающихся и администраторов. ${users.length} всего.</p></div>
+    <div><h1>Пользователи</h1><p>Логины для обучающихся и администраторов. Показано ${users.length} из ${allUsers.length}.</p></div>
     <button class="btn primary" id="newUserBtn">${ICONS.plus} Создать пользователя</button>
   </div>
+  <div style="margin-bottom:12px"><select class="field" style="max-width:260px" onchange="usersGroupFilter=this.value;render()">
+    <option value="">Все группы</option>
+    ${knownGroups.map(g=>`<option value="${esc(g)}" ${usersGroupFilter===g?'selected':''}>Группа ${esc(g)} (${allUsers.filter(u=>u.group===g).length})</option>`).join('')}
+    <option value="__none__" ${usersGroupFilter==='__none__'?'selected':''}>Без группы</option>
+  </select></div>
   <div class="card" style="overflow:auto">
     <table style="width:100%;border-collapse:collapse">
       <thead><tr style="border-bottom:1px solid var(--bord)">
         <th style="text-align:left;padding:10px;color:var(--ink3);font-size:11px;text-transform:uppercase">Имя</th>
         <th style="text-align:left;padding:10px;color:var(--ink3);font-size:11px;text-transform:uppercase">Email</th>
         <th style="text-align:left;padding:10px;color:var(--ink3);font-size:11px;text-transform:uppercase">Роль</th>
+        <th style="text-align:left;padding:10px;color:var(--ink3);font-size:11px;text-transform:uppercase">Группа</th>
         <th style="text-align:left;padding:10px;color:var(--ink3);font-size:11px;text-transform:uppercase">Статус</th>
         <th></th>
       </tr></thead>
-      <tbody>${rows || `<tr><td colspan="5" class="empty">Пока нет пользователей</td></tr>`}</tbody>
+      <tbody>${rows || `<tr><td colspan="6" class="empty">Пользователей не найдено</td></tr>`}</tbody>
     </table>
   </div>`;
 }
@@ -1417,6 +1434,9 @@ function openNewUserModal(){
       <option value="candidate">Обучающийся</option>
       <option value="admin">Админ</option>
     </select>
+    <label class="flabel">Группа (необязательно)</label>
+    <input class="field" id="nuGroup" list="groupList" placeholder="Например: 6123" style="margin-bottom:14px">
+    <datalist id="groupList">${knownGroups.map(g=>`<option value="${esc(g)}">`).join('')}</datalist>
     <div class="modal-actions">
       <button class="btn" id="nuCancel">Отмена</button>
       <button class="btn primary" id="nuCreate">Создать</button>
@@ -1430,9 +1450,10 @@ function openNewUserModal(){
     const email=document.getElementById('nuEmail').value.trim();
     const password=document.getElementById('nuPass').value;
     const role=document.getElementById('nuRole').value;
+    const group=document.getElementById('nuGroup').value.trim();
     if(!email || !password){ toast('Заполните email и пароль'); return; }
     try{
-      await api.createUser({name, email, password, role});
+      await api.createUser({name, email, password, role, group});
       veil.remove(); render(); toast('Пользователь создан — сообщите ему логин и пароль лично');
     }catch(e){
       toast(e.code==='email_already_in_use' ? 'Этот email уже используется' : 'Не удалось создать: '+e.message, true);
@@ -1454,6 +1475,9 @@ function openEditUserModal(user){
       <option value="admin" ${user.role==='admin'?'selected':''}>Админ</option>
     </select>
     ${user.id===currentUser.id?'<div style="font-size:11px;color:var(--ink3);margin:-8px 0 12px">Свою роль изменить нельзя</div>':''}
+    <label class="flabel">Группа</label>
+    <input class="field" id="euGroup" list="groupList" value="${esc(user.group||'')}" placeholder="Например: 6123" style="margin-bottom:12px">
+    <datalist id="groupList">${knownGroups.map(g=>`<option value="${esc(g)}">`).join('')}</datalist>
     <label class="flabel">Новый пароль (необязательно)</label>
     <input class="field" id="euPass" type="text" placeholder="оставьте пустым, если не меняете" style="margin-bottom:14px">
     <div class="modal-actions">
@@ -1467,6 +1491,7 @@ function openEditUserModal(user){
   document.getElementById('euSave').addEventListener('click', async ()=>{
     const patch = { name: document.getElementById('euName').value.trim(), email: document.getElementById('euEmail').value.trim() };
     if(user.id!==currentUser.id) patch.role = document.getElementById('euRole').value;
+    patch.group = document.getElementById('euGroup').value.trim();
     const pass = document.getElementById('euPass').value;
     if(pass) patch.password = pass;
     try{
@@ -1632,6 +1657,10 @@ async function loadAndRenderCampaignDetail(id){
     <b style="font-size:13px">Пригласить обучающихся</b>
     <p style="font-size:12px;color:var(--ink2);margin:4px 0 10px">Email через запятую или с новой строки. Приглашать можно только уже существующих пользователей с ролью «Обучающийся» — сначала создайте их на странице «Пользователи», если их ещё нет.</p>
     <textarea class="field" id="inviteEmails" rows="3" placeholder="student@testpotok.ru, another@testpotok.ru" style="margin-bottom:10px"></textarea>
+    <label class="flabel">Или целые группы (номера через запятую)</label>
+    <input class="field" id="inviteGroups" list="groupListInv" placeholder="Например: 6123, 6124" style="margin-bottom:10px">
+    <datalist id="groupListInv">${knownGroups.map(g=>`<option value="${esc(g)}">`).join('')}</datalist>
+    <p style="font-size:11px;color:var(--ink3);margin:-4px 0 10px">Будут приглашены все активные обучающиеся этих групп. Группу пользователю задают на странице «Пользователи».${knownGroups.length?' Известные группы: '+knownGroups.map(esc).join(', ')+'.':''}</p>
     <button class="btn primary" id="bulkInviteBtn">Пригласить</button>
   </div>
 
@@ -2555,14 +2584,16 @@ function bindPage(root, p1){
     });
     document.getElementById('bulkInviteBtn')?.addEventListener('click', async (e)=>{
       const raw = document.getElementById('inviteEmails').value.trim();
-      if(!raw){ toast('Введите хотя бы один email'); return; }
+      const grp = (document.getElementById('inviteGroups')?.value||'').trim();
+      if(!raw && !grp){ toast('Введите email или номера групп'); return; }
       e.target.disabled = true;
       try{
-        const result = await api.bulkInviteCampaign(cid, raw);
+        const result = await api.bulkInviteCampaign(cid, raw, grp);
         render();
         const parts = [];
         if(result.invited.length) parts.push(`приглашено: ${result.invited.length}`);
         if(result.alreadyInvited.length) parts.push(`уже были приглашены: ${result.alreadyInvited.length}`);
+        if((result.emptyGroups||[]).length) parts.push(`в группах нет обучающихся: ${result.emptyGroups.join(', ')}`);
         if(result.notFound.length) parts.push(`не найдены как обучающиеся: ${result.notFound.join(', ')}`);
         toast(parts.join(' · ') || 'Готово');
       }catch(err){ toast('Не удалось пригласить: '+err.message, true); e.target.disabled=false; }
